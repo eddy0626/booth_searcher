@@ -1,0 +1,134 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-01-01",
+  "avatars": [
+    {
+      "name_jp": "桔梗",
+      "name_kr": "키쿄",
+      "name_en": "Kikyo",
+      "aliases": ["ききょう", "kikyou"],
+      "creator": "ponderogen",
+      "booth_id": "ponderogen"
+    },
+    {
+      "name_jp": "セレスティア",
+      "name_kr": "셀레스티아",
+      "name_en": "Celestia",
+      "aliases": ["せれすてぃあ"],
+      "creator": "komado",
+      "booth_id": "komado"
+    },
+    {
+      "name_jp": "マヌカ",
+      "name_kr": "마누카",
+      "name_en": "Manuka",
+      "aliases": ["まぬか"],
+      "creator": "komado",
+      "booth_id": "komado"
+    },
+    {
+      "name_jp": "舞夜",
+      "name_kr": "마이야",
+      "name_en": "Maiya",
+      "aliases": ["まいや"],
+      "creator": "ponderogen",
+      "booth_id": "ponderogen"
+    },
+    {
+      "name_jp": "ルーシュカ",
+      "name_kr": "루슈카",
+      "name_en": "Rushka",
+      "aliases": ["るーしゅか"],
+      "creator": "atelier_krull",
+      "booth_id": "atelier-krull"
+    },
+    {
+      "name_jp": "リーファ",
+      "name_kr": "리파",
+      "name_en": "Leefa",
+      "aliases": ["りーふぁ"],
+      "creator": "mk22",
+      "booth_id": "mk22"
+    },
+    {
+      "name_jp": "サフィー",
+      "name_kr": "사피",
+      "name_en": "Saphie",
+      "aliases": ["さふぃー"],
+      "creator": "mk22",
+      "booth_id": "mk22"
+    },
+    {
+      "name_jp": "シフォン",
+      "name_kr": "시폰",
+      "name_en": "Chiffon",
+      "aliases": ["しふぉん"],
+      "creator": "SKYMY_Workshop",
+      "booth_id": "skymy"
+    },
+    {
+      "name_jp": "萌",
+      "name_kr": "모에",
+      "name_en": "Moe",
+      "aliases": ["もえ"],
+      "creator": "SKYMY_Workshop",
+      "booth_id": "skymy"
+    },
+    {
+      "name_jp": "ここあ",
+      "name_kr": "코코아",
+      "name_en": "Cocoa",
+      "aliases": ["kokoa"],
+      "creator": "里穂(riho)",
+      "booth_id": "kompeito-shop"
+    },
+    {
+      "name_jp": "イメリス",
+      "name_kr": "이메리스",
+      "name_en": "Imeris",
+      "aliases": ["いめりす"],
+      "creator": "Lapwing",
+      "booth_id": "lapwing"
+    },
+    {
+      "name_jp": "チューベローズ",
+      "name_kr": "튜베로즈",
+      "name_en": "Tuberose",
+      "aliases": ["ちゅーべろーず"],
+      "creator": "SKYMY_Workshop",
+      "booth_id": "skymy"
+    },
+    {
+      "name_jp": "カリン",
+      "name_kr": "카린",
+      "name_en": "Karin",
+      "aliases": ["かりん"],
+      "creator": "komado",
+      "booth_id": "komado"
+    },
+    {
+      "name_jp": "竜胆",
+      "name_kr": "린도",
+      "name_en": "Rindo",
+      "aliases": ["りんどう"],
+      "creator": "ponderogen",
+      "booth_id": "ponderogen"
+    },
+    {
+      "name_jp": "ユキ",
+      "name_kr": "유키",
+      "name_en": "Yuki",
+      "aliases": ["ゆき"],
+      "creator": "wakonoatorie",
+      "booth_id": "wakonoatorie"
+    },
+    {
+      "name_jp": "真冬",
+      "name_kr": "마후유",
+      "name_en": "Mafuyu",
+      "aliases": ["まふゆ"],
+      "creator": "wakonoatorie",
+      "booth_id": "wakonoatorie"
+    }
+  ]
+}

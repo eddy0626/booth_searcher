@@ -1,14 +1,24 @@
-# Booth VRChat 의상 검색기
+# Booth VRChat 의상 검색기 v2.0
 
 VRChat 아바타에 대응하는 의상을 Booth.pm에서 검색하는 데스크톱 애플리케이션입니다.
 
 ## 주요 기능
 
+### 기본 기능
 - **아바타 이름으로 검색**: 일본어 아바타 이름을 입력하면 해당 아바타에 대응하는 의상을 검색합니다.
-- **인기 아바타 목록**: 자주 사용되는 VRChat 아바타 목록을 제공합니다.
+- **인기 아바타 목록**: 자주 사용되는 VRChat 아바타 목록을 제공합니다. (외부 JSON으로 관리)
 - **카테고리 필터**: 3D 의상, 액세서리 등 카테고리별로 필터링할 수 있습니다.
 - **썸네일 미리보기**: 상품 썸네일 이미지를 바로 확인할 수 있습니다.
 - **바로가기**: 상품 카드를 클릭하면 Booth.pm 페이지로 바로 이동합니다.
+
+### v2.0 신규 기능
+- **검색 필터**: 정렬 (최신/인기/가격순), 가격 범위, 무료만 필터
+- **무한 스크롤**: 스크롤 하단 도달 시 자동으로 다음 페이지 로드
+- **검색 취소**: 검색 중 취소 가능
+- **이미지 캐시**: 메모리 + 디스크 LRU 캐시로 빠른 이미지 로딩
+- **결과 캐시**: SQLite 기반 검색 결과 캐싱 (30분 TTL)
+- **최근 검색어**: 최근 검색한 아바타 기록 및 빠른 재검색
+- **사용자 설정**: 창 크기, 필터 설정 등 자동 저장
 
 ## 설치 방법
 
@@ -85,24 +95,60 @@ spec 파일 없이 빌드하려면:
 pyinstaller --onefile --windowed --name BoothSearcher main.py
 ```
 
-## 프로젝트 구조
+## 프로젝트 구조 (v2.0)
 
 ```
 booth_searcher/
-├── main.py          # 메인 실행 파일
-├── scraper.py       # Booth 스크래핑 로직
-├── gui.py           # GUI 인터페이스
-├── requirements.txt # 의존성 패키지 목록
-├── build.spec       # PyInstaller 설정
-└── README.md        # 사용 설명서
+├── main.py              # 메인 진입점
+├── __version__.py       # 버전 정보
+├── build.py             # 빌드 스크립트
+├── requirements.txt     # 의존성
+│
+├── config/              # 설정
+│   ├── settings.py      # 앱 설정
+│   ├── constants.py     # 상수 정의
+│   └── user_prefs.py    # 사용자 환경설정
+│
+├── models/              # 데이터 모델
+│   ├── booth_item.py    # 상품 모델
+│   ├── search_params.py # 검색 파라미터
+│   └── search_result.py # 검색 결과
+│
+├── scraping/            # 스크래핑 엔진
+│   ├── booth_client.py  # HTTP 클라이언트
+│   ├── rate_limiter.py  # 레이트 리미터
+│   └── parsers/         # HTML 파서
+│
+├── cache/               # 캐시 시스템
+│   ├── image_cache.py   # 이미지 LRU 캐시
+│   └── result_cache.py  # SQLite 결과 캐시
+│
+├── core/                # 비즈니스 로직
+│   ├── search_service.py # 검색 오케스트레이션
+│   └── cache_service.py  # 캐시 통합
+│
+├── gui/                 # GUI
+│   ├── main_window.py   # 메인 윈도우
+│   ├── workers/         # 백그라운드 워커
+│   ├── widgets/         # UI 위젯
+│   └── dialogs/         # 다이얼로그
+│
+├── data/                # 데이터 파일
+│   └── popular_avatars.json  # 인기 아바타 목록
+│
+└── utils/               # 유틸리티
+    ├── logging.py       # 로깅
+    ├── paths.py         # 경로 관리
+    └── exceptions.py    # 예외 정의
 ```
 
 ## 기술 스택
 
-- **Python 3.9+**
+- **Python 3.10+**
 - **PyQt6**: GUI 프레임워크
-- **requests**: HTTP 요청
-- **BeautifulSoup4**: HTML 파싱
+- **urllib3**: HTTP 클라이언트 (재시도/백오프)
+- **BeautifulSoup4**: HTML 파싱 (다중 셀렉터 폴백)
+- **SQLite3**: 검색 결과 캐시
 - **PyInstaller**: EXE 빌드
 
 ## 주의사항

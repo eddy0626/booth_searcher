@@ -1,4 +1,18 @@
+# Booth VRChat 의상 검색기 v2.0.0
+# Python 3.10+ 권장
+
+# GUI
 PyQt6>=6.4.0
-requests>=2.28.0
-beautifulsoup4>=4.11.0
-pyinstaller>=5.7.0
+
+# HTTP 클라이언트
+urllib3>=2.0.0
+
+# HTML 파싱
+beautifulsoup4>=4.12.0
+
+# 개발 도구 (선택)
+# pyinstaller>=6.0.0  # 빌드용
+
+# 테스트 (선택)
+# pytest>=7.0.0
+# pytest-qt>=4.0.0

@@ -18,12 +18,18 @@ else:
 # 모듈 경로 추가
 sys.path.insert(0, application_path)
 
+from utils.logging import setup_logging, get_logger
 from gui import run_app
+
+logger = get_logger(__name__)
 
 
 def main():
     """메인 함수"""
-    print("Booth VRChat 의상 검색기를 시작합니다...")
+    # 로깅 초기화
+    setup_logging()
+
+    logger.info("Booth VRChat 의상 검색기를 시작합니다...")
     run_app()
 
 
