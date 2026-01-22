@@ -53,12 +53,15 @@ class ResultList(QScrollArea):
     # 시그널
     load_more = pyqtSignal()  # 다음 페이지 요청
     item_clicked = pyqtSignal(BoothItem)
+    first_item_rendered = pyqtSignal()
 
     # 상수
     CARD_WIDTH = 200
     CARD_HEIGHT = 280
     CARD_SPACING = 10
     LOAD_MORE_THRESHOLD = 100  # 하단 100px 도달 시 로드
+    BATCH_SIZE = 12
+    BATCH_INTERVAL_MS = 0
 
     def __init__(
         self,
@@ -73,15 +76,22 @@ class ResultList(QScrollArea):
         # 상태
         self._result: Optional[SearchResult] = None
         self._cards: List[QWidget] = []
+        self._pending_items: List[BoothItem] = []
         self._columns = 4
         self._loading_more = False
         self._has_more = False
+        self._first_item_emitted = False
 
         # UI 구성
         self._setup_ui()
 
         # 스크롤 이벤트 연결
         self.verticalScrollBar().valueChanged.connect(self._on_scroll)
+
+        # 배치 렌더링 타이머
+        self._batch_timer = QTimer(self)
+        self._batch_timer.setInterval(self.BATCH_INTERVAL_MS)
+        self._batch_timer.timeout.connect(self._process_pending_items)
 
         logger.debug("ResultList 초기화")
 
@@ -230,6 +240,10 @@ class ResultList(QScrollArea):
 
     def _clear_cards(self) -> None:
         """카드 제거"""
+        if self._batch_timer.isActive():
+            self._batch_timer.stop()
+        self._pending_items.clear()
+        self._first_item_emitted = False
         for card in self._cards:
             self._grid_layout.removeWidget(card)
             card.deleteLater()
@@ -237,29 +251,57 @@ class ResultList(QScrollArea):
         self._update_grid_size()
 
     def _add_items(self, items: List[BoothItem]) -> None:
-        """아이템 추가"""
+        """??? ??"""
         if not self._card_factory:
-            logger.warning("카드 팩토리가 설정되지 않음")
+            logger.warning("?? ???? ???? ??")
             return
 
+        if not items:
+            return
+
+        self._pending_items.extend(items)
+
+        if not self._batch_timer.isActive():
+            self._batch_timer.start()
+
+    def _process_pending_items(self) -> None:
+        """?? ?? ??? ?? ???"""
+        if not self._pending_items:
+            self._batch_timer.stop()
+            return
+
+        batch = self._pending_items[: self.BATCH_SIZE]
+        del self._pending_items[: self.BATCH_SIZE]
+
+        self._create_cards(batch)
+
+        if not self._pending_items:
+            self._batch_timer.stop()
+
+    def _create_cards(self, items: List[BoothItem]) -> None:
+        """??? ?? ?? ? ??"""
         start_index = len(self._cards)
 
         for i, item in enumerate(items):
             card = self._card_factory(item)
 
-            # 클릭 이벤트 연결
+            if not self._first_item_emitted:
+                self._first_item_emitted = True
+                self.first_item_rendered.emit()
+
+            # ?? ??? ??
             if hasattr(card, "clicked"):
                 card.clicked.connect(lambda it=item: self.item_clicked.emit(it))
 
             self._cards.append(card)
 
-            # 그리드에 추가
+            # ???? ??
             idx = start_index + i
             row = idx // self._columns
             col = idx % self._columns
             self._grid_layout.addWidget(card, row, col)
 
-        # 그리드 위젯 크기 업데이트
+        # ??? ???? ?? ????
         self._update_grid_size()
 
     def _on_scroll(self, value: int) -> None:

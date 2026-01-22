@@ -1,0 +1,34 @@
+{
+  "positive_keywords": [
+    "対応",
+    "専用",
+    "for",
+    "対応品",
+    "対応衣装"
+  ],
+  "negative_keywords": [
+    "汎用",
+    "素体",
+    "アバター不問",
+    "generic"
+  ],
+  "unrelated_keywords": [
+    "unity",
+    "blender",
+    "shader",
+    "texture"
+  ],
+  "score": {
+    "exact_title_match": 50,
+    "token_match": 10,
+    "positive_keyword": 5,
+    "negative_keyword": -15,
+    "unrelated_keyword": -8,
+    "recent_click_title": 6,
+    "recent_click_shop": 4
+  },
+  "buckets": {
+    "strong": 60,
+    "medium": 30
+  }
+}

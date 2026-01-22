@@ -9,6 +9,7 @@
 
 import logging
 import logging.handlers
+import time
 from pathlib import Path
 from typing import Optional
 import sys
@@ -143,6 +144,27 @@ def shutdown() -> None:
     로깅 시스템 종료 (리소스 정리)
     """
     logging.shutdown()
+
+
+def log_timing(
+    logger: logging.Logger,
+    label: str,
+    start_time: float,
+) -> float:
+    """
+    간단한 타이밍 로그 출력
+
+    Args:
+        logger: 사용할 로거
+        label: 로그 라벨
+        start_time: time.perf_counter() 시작 시각
+
+    Returns:
+        경과 시간 (ms)
+    """
+    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+    logger.info(f"[timing] {label}: {elapsed_ms:.1f}ms")
+    return elapsed_ms
 
 
 class LogContext:

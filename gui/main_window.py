@@ -5,6 +5,7 @@
 """
 
 from typing import Optional
+import time
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -18,6 +19,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QStatusBar,
     QMessageBox,
+    QCheckBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QCloseEvent
@@ -28,7 +30,8 @@ from models.booth_item import BoothItem
 from core.search_service import SearchService
 from config.settings import Settings
 from config.constants import BOOTH_CATEGORIES
-from utils.logging import get_logger
+from config.user_prefs import get_prefs, save_prefs
+from utils.logging import get_logger, log_timing
 
 from .workers.search_worker import SearchWorker
 from .workers.image_pool import ImageLoaderPool
@@ -65,10 +68,16 @@ class MainWindow(QMainWindow):
         )
         self._image_pool = ImageLoaderPool(settings=self.settings)
         self._card_factory = ItemCardFactory(self._image_pool)
+        self._card_factory.set_first_thumbnail_callback(
+            self._on_first_thumbnail_rendered
+        )
 
         # 현재 검색 상태
         self._current_params: Optional[SearchParams] = None
         self._current_result: Optional[SearchResult] = None
+        self._search_start_time: Optional[float] = None
+        self._first_result_logged = False
+        self._first_thumbnail_logged = False
 
         # UI 구성
         self._setup_ui()
@@ -115,6 +124,12 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel("아바타 이름을 입력하고 검색 버튼을 클릭하세요.")
         self._status_label.setObjectName("statusLabel")
         main_layout.addWidget(self._status_label)
+
+        # === 검색어 보정 힌트 ===
+        self._correction_hint = QLabel("")
+        self._correction_hint.setObjectName("correctionHint")
+        self._correction_hint.hide()
+        main_layout.addWidget(self._correction_hint)
 
         # === 결과 리스트 ===
         self._result_list = ResultList()
@@ -188,6 +203,16 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(filter_layout)
 
+        # 검색어 보정 토글
+        correction_layout = QHBoxLayout()
+        correction_layout.setSpacing(8)
+        correction_layout.addStretch()
+        self._correction_toggle = QCheckBox("검색어 보정")
+        self._correction_toggle.setChecked(True)
+        self._correction_toggle.setToolTip("검색어 정규화/폴백 검색을 사용합니다.")
+        correction_layout.addWidget(self._correction_toggle)
+        layout.addLayout(correction_layout)
+
         return frame
 
     def _connect_signals(self) -> None:
@@ -211,6 +236,7 @@ class MainWindow(QMainWindow):
         # 결과 리스트
         self._result_list.load_more.connect(self._on_load_more)
         self._result_list.item_clicked.connect(self._on_item_clicked)
+        self._result_list.first_item_rendered.connect(self._on_first_result_rendered)
 
     def _apply_styles(self) -> None:
         """스타일 적용"""
@@ -289,6 +315,11 @@ class MainWindow(QMainWindow):
                 font-size: 13px;
                 padding: 5px;
             }
+            #correctionHint {
+                color: #888;
+                font-size: 12px;
+                padding: 2px 5px;
+            }
 
             QProgressBar {
                 border: none;
@@ -320,6 +351,8 @@ class MainWindow(QMainWindow):
             sort=self._filter_panel.sort_order,
             price_range=self._filter_panel.price_range,
             page=1,
+            raw_query=avatar_name,
+            normalization_enabled=self._correction_toggle.isChecked(),
         )
 
         # 카드 팩토리 초기화
@@ -341,7 +374,13 @@ class MainWindow(QMainWindow):
         self._cancel_btn.show()
         self._progress_bar.show()
         self._status_label.setText(f"'{params.avatar_name}' 검색 중...")
+        self._correction_hint.hide()
         self._result_list.show_loading()
+        if params.page == 1:
+            self._search_start_time = time.perf_counter()
+            self._first_result_logged = False
+            self._first_thumbnail_logged = False
+            self._card_factory.reset_timing()
 
         logger.debug(f"검색 시작: {params.avatar_name}")
 
@@ -355,10 +394,26 @@ class MainWindow(QMainWindow):
         else:
             self._progress_bar.setRange(0, 0)
 
+    def _on_first_result_rendered(self) -> None:
+        """? ?? ??? ??? ??"""
+        if self._search_start_time is None or self._first_result_logged:
+            return
+        self._first_result_logged = True
+        log_timing(logger, "time_to_first_result", self._search_start_time)
+
+    def _on_first_thumbnail_rendered(self) -> None:
+        """? ??? ??? ??? ??"""
+        if self._search_start_time is None or self._first_thumbnail_logged:
+            return
+        self._first_thumbnail_logged = True
+        log_timing(logger, "time_to_first_thumbnail", self._search_start_time)
+
     def _on_search_result(self, result: SearchResult) -> None:
         """검색 결과 수신"""
         self._search_complete()
         self._current_result = result
+        if self._current_params is not None and result.resolved_query:
+            self._current_params = self._current_params.with_avatar_name(result.resolved_query)
 
         if result.is_empty:
             self._status_label.setText("검색 결과가 없습니다.")
@@ -369,6 +424,18 @@ class MainWindow(QMainWindow):
                 f"{len(result.items)}개 (전체 {result.total_count}개)"
             )
             self._result_list.set_result(result)
+
+        if result.current_page == 1:
+            if result.correction_applied:
+                detail = ""
+                if result.attempt_label and result.attempt_description:
+                    detail = f" ({result.attempt_label}: {result.attempt_description})"
+                elif result.attempt_label and result.attempt_label != "A":
+                    detail = f" ({result.attempt_label})"
+                self._correction_hint.setText(f"검색어 보정 적용됨{detail}")
+                self._correction_hint.show()
+            else:
+                self._correction_hint.hide()
 
         # 상태 바 업데이트
         stats = self._search_service.get_stats()
@@ -414,6 +481,9 @@ class MainWindow(QMainWindow):
             sort=sort,
             price_range=price_range,
             page=1,
+            raw_query=self._current_params.raw_query,
+            normalization_enabled=self._current_params.normalization_enabled,
+            allow_multi=self._current_params.allow_multi,
         )
 
         # 카드 팩토리 초기화
@@ -448,6 +518,9 @@ class MainWindow(QMainWindow):
     def _on_item_clicked(self, item: BoothItem) -> None:
         """아이템 클릭"""
         logger.debug(f"아이템 클릭: {item.name}")
+        prefs = get_prefs()
+        prefs.add_recent_click(item.name, item.shop_name)
+        save_prefs(prefs)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """창 닫기 이벤트"""

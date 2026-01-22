@@ -49,6 +49,10 @@ class BoothItem:
     likes: int = 0
     created_at: Optional[datetime] = None
     tags: Tuple[str, ...] = field(default_factory=tuple)
+    relevance_score: float = 0.0
+    relevance_label: str = ""
+    matched_tokens: Tuple[str, ...] = field(default_factory=tuple)
+    verified_in_description: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -67,6 +71,10 @@ class BoothItem:
             "likes": self.likes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "tags": list(self.tags),
+            "relevance_score": self.relevance_score,
+            "relevance_label": self.relevance_label,
+            "matched_tokens": list(self.matched_tokens),
+            "verified_in_description": self.verified_in_description,
         }
 
     @classmethod
@@ -101,6 +109,10 @@ class BoothItem:
             likes=data.get("likes", 0),
             created_at=created_at,
             tags=tuple(data.get("tags", [])),
+            relevance_score=float(data.get("relevance_score", 0.0) or 0.0),
+            relevance_label=data.get("relevance_label", ""),
+            matched_tokens=tuple(data.get("matched_tokens", [])),
+            verified_in_description=bool(data.get("verified_in_description", False)),
         )
 
     @property

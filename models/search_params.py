@@ -97,10 +97,17 @@ class SearchParams:
     price_range: Optional[PriceRange] = None
     page: int = 1
     per_page: int = 24
+    raw_query: str = ""
+    normalization_enabled: bool = True
+    allow_multi: bool = True
+    verify_mode: bool = False
+    verify_top_n: int = 10
 
     def __post_init__(self):
         """초기화 후 유효성 검사"""
         self.avatar_name = self.avatar_name.strip()
+        if not self.raw_query:
+            self.raw_query = self.avatar_name
         if self.page < 1:
             self.page = 1
         if self.per_page < 1:
@@ -138,6 +145,11 @@ class SearchParams:
             "price_range": self.price_range.to_dict() if self.price_range else None,
             "page": self.page,
             "per_page": self.per_page,
+            "raw_query": self.raw_query,
+            "normalization_enabled": self.normalization_enabled,
+            "allow_multi": self.allow_multi,
+            "verify_mode": self.verify_mode,
+            "verify_top_n": self.verify_top_n,
         }
 
     @classmethod
@@ -161,6 +173,11 @@ class SearchParams:
             price_range=price_range,
             page=data.get("page", 1),
             per_page=data.get("per_page", 24),
+            raw_query=data.get("raw_query", ""),
+            normalization_enabled=data.get("normalization_enabled", True),
+            allow_multi=data.get("allow_multi", True),
+            verify_mode=data.get("verify_mode", False),
+            verify_top_n=data.get("verify_top_n", 10),
         )
 
     def with_page(self, page: int) -> "SearchParams":
@@ -172,6 +189,27 @@ class SearchParams:
             price_range=self.price_range,
             page=page,
             per_page=self.per_page,
+            raw_query=self.raw_query,
+            normalization_enabled=self.normalization_enabled,
+            allow_multi=self.allow_multi,
+            verify_mode=self.verify_mode,
+            verify_top_n=self.verify_top_n,
+        )
+
+    def with_avatar_name(self, avatar_name: str) -> "SearchParams":
+        """새 아바타 이름으로 복사본 생성"""
+        return SearchParams(
+            avatar_name=avatar_name,
+            category=self.category,
+            sort=self.sort,
+            price_range=self.price_range,
+            page=self.page,
+            per_page=self.per_page,
+            raw_query=self.raw_query,
+            normalization_enabled=self.normalization_enabled,
+            allow_multi=self.allow_multi,
+            verify_mode=self.verify_mode,
+            verify_top_n=self.verify_top_n,
         )
 
     def get_search_keyword(self) -> str:

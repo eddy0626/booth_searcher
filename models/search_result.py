@@ -34,6 +34,11 @@ class SearchResult:
     query: str
     cached: bool = False
     cache_age_seconds: Optional[int] = None
+    raw_query: str = ""
+    resolved_query: str = ""
+    attempt_label: str = "A"
+    attempt_description: str = ""
+    correction_applied: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -71,6 +76,11 @@ class SearchResult:
             "total_pages": self.total_pages,
             "has_next": self.has_next,
             "query": self.query,
+            "raw_query": self.raw_query,
+            "resolved_query": self.resolved_query,
+            "attempt_label": self.attempt_label,
+            "attempt_description": self.attempt_description,
+            "correction_applied": self.correction_applied,
         }
 
     @classmethod
@@ -87,6 +97,11 @@ class SearchResult:
             query=data.get("query", ""),
             cached=cached,
             cache_age_seconds=cache_age if cached else None,
+            raw_query=data.get("raw_query", ""),
+            resolved_query=data.get("resolved_query", data.get("query", "")),
+            attempt_label=data.get("attempt_label", "A"),
+            attempt_description=data.get("attempt_description", ""),
+            correction_applied=data.get("correction_applied", False),
         )
 
     @classmethod
@@ -99,6 +114,11 @@ class SearchResult:
             total_pages=0,
             has_next=False,
             query=query,
+            raw_query="",
+            resolved_query=query,
+            attempt_label="A",
+            attempt_description="",
+            correction_applied=False,
         )
 
     def merge(self, other: "SearchResult") -> "SearchResult":
@@ -119,6 +139,11 @@ class SearchResult:
             has_next=other.has_next,
             query=self.query,
             cached=False,  # 병합 결과는 캐시 아님
+            raw_query=self.raw_query,
+            resolved_query=self.resolved_query,
+            attempt_label=self.attempt_label,
+            attempt_description=self.attempt_description,
+            correction_applied=self.correction_applied,
         )
 
     def filter_by_price(
@@ -147,6 +172,11 @@ class SearchResult:
             query=self.query,
             cached=self.cached,
             cache_age_seconds=self.cache_age_seconds,
+            raw_query=self.raw_query,
+            resolved_query=self.resolved_query,
+            attempt_label=self.attempt_label,
+            attempt_description=self.attempt_description,
+            correction_applied=self.correction_applied,
         )
 
     def filter_free_only(self) -> "SearchResult":
@@ -162,6 +192,11 @@ class SearchResult:
             query=self.query,
             cached=self.cached,
             cache_age_seconds=self.cache_age_seconds,
+            raw_query=self.raw_query,
+            resolved_query=self.resolved_query,
+            attempt_label=self.attempt_label,
+            attempt_description=self.attempt_description,
+            correction_applied=self.correction_applied,
         )
 
     def sort_by_price(self, ascending: bool = True) -> "SearchResult":
@@ -191,6 +226,11 @@ class SearchResult:
             query=self.query,
             cached=self.cached,
             cache_age_seconds=self.cache_age_seconds,
+            raw_query=self.raw_query,
+            resolved_query=self.resolved_query,
+            attempt_label=self.attempt_label,
+            attempt_description=self.attempt_description,
+            correction_applied=self.correction_applied,
         )
 
     def sort_by_likes(self) -> "SearchResult":
@@ -206,6 +246,11 @@ class SearchResult:
             query=self.query,
             cached=self.cached,
             cache_age_seconds=self.cache_age_seconds,
+            raw_query=self.raw_query,
+            resolved_query=self.resolved_query,
+            attempt_label=self.attempt_label,
+            attempt_description=self.attempt_description,
+            correction_applied=self.correction_applied,
         )
 
     def __str__(self) -> str:

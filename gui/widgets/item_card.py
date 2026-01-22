@@ -5,7 +5,9 @@ Booth 상품을 카드 형태로 표시합니다.
 """
 
 import webbrowser
-from typing import Optional
+import html
+import re
+from typing import Optional, Callable
 from PyQt6.QtWidgets import (
     QFrame,
     QVBoxLayout,
@@ -84,7 +86,9 @@ class ItemCard(QFrame):
         layout.addWidget(self._thumbnail_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # 상품명
-        self._name_label = QLabel(self._truncate_text(self.item.name, 35))
+        self._name_label = QLabel()
+        self._name_label.setText(self._format_title_html(self.item.name))
+        self._name_label.setTextFormat(Qt.TextFormat.RichText)
         self._name_label.setWordWrap(True)
         self._name_label.setMaximumHeight(40)
         self._name_label.setStyleSheet("""
@@ -96,6 +100,20 @@ class ItemCard(QFrame):
         """)
         self._name_label.setToolTip(self.item.name)
         layout.addWidget(self._name_label)
+
+        # 매칭 배지
+        self._match_label = QLabel(self._format_match_badge())
+        self._match_label.setStyleSheet("""
+            QLabel {
+                font-size: 10px;
+                color: #555;
+                background-color: #f2f2f2;
+                padding: 2px 6px;
+                border-radius: 8px;
+            }
+        """)
+        if self._match_label.text():
+            layout.addWidget(self._match_label)
 
         # 샵 이름
         if self.item.shop_name:
@@ -136,6 +154,35 @@ class ItemCard(QFrame):
         if len(text) > max_length:
             return text[:max_length - 1] + "…"
         return text
+
+    def _format_title_html(self, title: str) -> str:
+        """타이틀에 매칭 토큰 강조 표시"""
+        if not title:
+            return ""
+
+        truncated = self._truncate_text(title, 60)
+        safe_title = html.escape(truncated)
+        tokens = list(self.item.matched_tokens or [])
+        if not tokens:
+            return safe_title
+
+        highlighted = safe_title
+        for token in tokens:
+            if not token:
+                continue
+            pattern = re.compile(re.escape(html.escape(token)), re.IGNORECASE)
+            highlighted = pattern.sub(r"<u><b>\\g<0></b></u>", highlighted)
+
+        return highlighted
+
+    def _format_match_badge(self) -> str:
+        """매칭 배지 텍스트 구성"""
+        label = self.item.relevance_label
+        if not label:
+            return ""
+        if self.item.verified_in_description:
+            return f"{label} · 설명에서 확인됨"
+        return label
 
     def _format_price(self) -> str:
         """가격 포맷팅"""
@@ -237,11 +284,21 @@ class ItemCardFactory:
         """
         self._image_pool = image_pool
         self._cards: dict[str, ItemCard] = {}  # url -> card
+        self._first_thumbnail_callback: Optional[Callable[[], None]] = None
+        self._first_thumbnail_emitted = False
 
         # 이미지 풀 시그널 연결
         if image_pool:
             image_pool.image_loaded.connect(self._on_image_loaded)
             image_pool.image_error.connect(self._on_image_error)
+
+    def set_first_thumbnail_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """? ??? ?? ?? ??"""
+        self._first_thumbnail_callback = callback
+
+    def reset_timing(self) -> None:
+        """??? ?? ?? ???"""
+        self._first_thumbnail_emitted = False
 
     def create(self, item: BoothItem) -> ItemCard:
         """
@@ -263,10 +320,14 @@ class ItemCardFactory:
         return card
 
     def _on_image_loaded(self, url: str, pixmap: QPixmap) -> None:
-        """이미지 로드 완료 콜백"""
+        """??? ?? ?? ??"""
         if url in self._cards:
             self._cards[url].set_thumbnail(pixmap)
             del self._cards[url]
+
+            if not self._first_thumbnail_emitted and self._first_thumbnail_callback:
+                self._first_thumbnail_emitted = True
+                self._first_thumbnail_callback()
 
     def _on_image_error(self, url: str, error: str) -> None:
         """이미지 로드 실패 콜백"""
@@ -277,3 +338,4 @@ class ItemCardFactory:
     def clear(self) -> None:
         """등록된 카드 초기화"""
         self._cards.clear()
+        self._first_thumbnail_emitted = False
