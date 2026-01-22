@@ -39,6 +39,8 @@ class SearchResult:
     attempt_label: str = "A"
     attempt_description: str = ""
     correction_applied: bool = False
+    used_strategy: str = "original"
+    attempts_count: int = 1
 
     @property
     def is_empty(self) -> bool:
@@ -81,6 +83,8 @@ class SearchResult:
             "attempt_label": self.attempt_label,
             "attempt_description": self.attempt_description,
             "correction_applied": self.correction_applied,
+            "used_strategy": self.used_strategy,
+            "attempts_count": self.attempts_count,
         }
 
     @classmethod
@@ -102,6 +106,8 @@ class SearchResult:
             attempt_label=data.get("attempt_label", "A"),
             attempt_description=data.get("attempt_description", ""),
             correction_applied=data.get("correction_applied", False),
+            used_strategy=data.get("used_strategy", "original"),
+            attempts_count=data.get("attempts_count", 1),
         )
 
     @classmethod
@@ -119,6 +125,8 @@ class SearchResult:
             attempt_label="A",
             attempt_description="",
             correction_applied=False,
+            used_strategy="original",
+            attempts_count=1,
         )
 
     def merge(self, other: "SearchResult") -> "SearchResult":
@@ -144,6 +152,8 @@ class SearchResult:
             attempt_label=self.attempt_label,
             attempt_description=self.attempt_description,
             correction_applied=self.correction_applied,
+            used_strategy=self.used_strategy,
+            attempts_count=self.attempts_count,
         )
 
     def filter_by_price(
@@ -177,6 +187,8 @@ class SearchResult:
             attempt_label=self.attempt_label,
             attempt_description=self.attempt_description,
             correction_applied=self.correction_applied,
+            used_strategy=self.used_strategy,
+            attempts_count=self.attempts_count,
         )
 
     def filter_free_only(self) -> "SearchResult":
@@ -197,6 +209,8 @@ class SearchResult:
             attempt_label=self.attempt_label,
             attempt_description=self.attempt_description,
             correction_applied=self.correction_applied,
+            used_strategy=self.used_strategy,
+            attempts_count=self.attempts_count,
         )
 
     def sort_by_price(self, ascending: bool = True) -> "SearchResult":
@@ -231,6 +245,8 @@ class SearchResult:
             attempt_label=self.attempt_label,
             attempt_description=self.attempt_description,
             correction_applied=self.correction_applied,
+            used_strategy=self.used_strategy,
+            attempts_count=self.attempts_count,
         )
 
     def sort_by_likes(self) -> "SearchResult":

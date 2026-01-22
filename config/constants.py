@@ -54,7 +54,7 @@ USER_AGENTS = [
 DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "ko-KR,ko;q=0.9,ja;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
     "Cache-Control": "no-cache",
 }

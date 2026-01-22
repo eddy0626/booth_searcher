@@ -98,8 +98,14 @@ class SearchParams:
     page: int = 1
     per_page: int = 24
     raw_query: str = ""
-    normalization_enabled: bool = True
-    allow_multi: bool = True
+    normalize_enabled: Optional[bool] = None
+    alias_enabled: bool = True
+    fallback_enabled: bool = True
+    fallback_min_results: int = 5
+    resolved_query: Optional[str] = None
+    used_strategy: Optional[str] = None
+    normalization_enabled: bool = True  # backward compat
+    allow_multi: bool = False
     verify_mode: bool = False
     verify_top_n: int = 10
 
@@ -108,10 +114,15 @@ class SearchParams:
         self.avatar_name = self.avatar_name.strip()
         if not self.raw_query:
             self.raw_query = self.avatar_name
+        if self.normalize_enabled is None:
+            self.normalize_enabled = self.normalization_enabled
+        self.normalization_enabled = bool(self.normalize_enabled)
         if self.page < 1:
             self.page = 1
         if self.per_page < 1:
             self.per_page = 24
+        if self.fallback_min_results < 1:
+            self.fallback_min_results = 1
 
     def cache_key(self) -> str:
         """
@@ -146,6 +157,12 @@ class SearchParams:
             "page": self.page,
             "per_page": self.per_page,
             "raw_query": self.raw_query,
+            "normalize_enabled": self.normalize_enabled,
+            "alias_enabled": self.alias_enabled,
+            "fallback_enabled": self.fallback_enabled,
+            "fallback_min_results": self.fallback_min_results,
+            "resolved_query": self.resolved_query,
+            "used_strategy": self.used_strategy,
             "normalization_enabled": self.normalization_enabled,
             "allow_multi": self.allow_multi,
             "verify_mode": self.verify_mode,
@@ -166,6 +183,11 @@ class SearchParams:
         if data.get("price_range"):
             price_range = PriceRange.from_dict(data["price_range"])
 
+        normalize_enabled = data.get(
+            "normalize_enabled",
+            data.get("normalization_enabled", True),
+        )
+
         return cls(
             avatar_name=data.get("avatar_name", ""),
             category=data.get("category", "전체"),
@@ -174,8 +196,14 @@ class SearchParams:
             page=data.get("page", 1),
             per_page=data.get("per_page", 24),
             raw_query=data.get("raw_query", ""),
-            normalization_enabled=data.get("normalization_enabled", True),
-            allow_multi=data.get("allow_multi", True),
+            normalize_enabled=normalize_enabled,
+            alias_enabled=data.get("alias_enabled", True),
+            fallback_enabled=data.get("fallback_enabled", True),
+            fallback_min_results=data.get("fallback_min_results", 5),
+            resolved_query=data.get("resolved_query"),
+            used_strategy=data.get("used_strategy"),
+            normalization_enabled=data.get("normalization_enabled", normalize_enabled),
+            allow_multi=data.get("allow_multi", False),
             verify_mode=data.get("verify_mode", False),
             verify_top_n=data.get("verify_top_n", 10),
         )
@@ -190,6 +218,12 @@ class SearchParams:
             page=page,
             per_page=self.per_page,
             raw_query=self.raw_query,
+            normalize_enabled=self.normalize_enabled,
+            alias_enabled=self.alias_enabled,
+            fallback_enabled=self.fallback_enabled,
+            fallback_min_results=self.fallback_min_results,
+            resolved_query=self.resolved_query,
+            used_strategy=self.used_strategy,
             normalization_enabled=self.normalization_enabled,
             allow_multi=self.allow_multi,
             verify_mode=self.verify_mode,
@@ -206,6 +240,12 @@ class SearchParams:
             page=self.page,
             per_page=self.per_page,
             raw_query=self.raw_query,
+            normalize_enabled=self.normalize_enabled,
+            alias_enabled=self.alias_enabled,
+            fallback_enabled=self.fallback_enabled,
+            fallback_min_results=self.fallback_min_results,
+            resolved_query=self.resolved_query,
+            used_strategy=self.used_strategy,
             normalization_enabled=self.normalization_enabled,
             allow_multi=self.allow_multi,
             verify_mode=self.verify_mode,

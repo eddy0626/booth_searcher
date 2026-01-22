@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from typing import Iterable, List, Tuple, Dict
 
-from utils.query_normalization import normalize_query
+from utils.query_normalize import normalize_query
 
 _WHITESPACE_RE = re.compile(r"\s+")
 

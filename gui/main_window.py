@@ -208,7 +208,8 @@ class MainWindow(QMainWindow):
         correction_layout.setSpacing(8)
         correction_layout.addStretch()
         self._correction_toggle = QCheckBox("검색어 보정")
-        self._correction_toggle.setChecked(True)
+        prefs = get_prefs()
+        self._correction_toggle.setChecked(prefs.search.normalize_enabled)
         self._correction_toggle.setToolTip("검색어 정규화/폴백 검색을 사용합니다.")
         correction_layout.addWidget(self._correction_toggle)
         layout.addLayout(correction_layout)
@@ -237,6 +238,9 @@ class MainWindow(QMainWindow):
         self._result_list.load_more.connect(self._on_load_more)
         self._result_list.item_clicked.connect(self._on_item_clicked)
         self._result_list.first_item_rendered.connect(self._on_first_result_rendered)
+
+        # 검색어 보정 토글
+        self._correction_toggle.toggled.connect(self._on_correction_toggle)
 
     def _apply_styles(self) -> None:
         """스타일 적용"""
@@ -345,6 +349,8 @@ class MainWindow(QMainWindow):
             return
 
         # 검색 파라미터 생성
+        prefs = get_prefs()
+        correction_enabled = self._correction_toggle.isChecked()
         self._current_params = SearchParams(
             avatar_name=avatar_name,
             category=self._category_combo.currentText(),
@@ -352,7 +358,10 @@ class MainWindow(QMainWindow):
             price_range=self._filter_panel.price_range,
             page=1,
             raw_query=avatar_name,
-            normalization_enabled=self._correction_toggle.isChecked(),
+            normalize_enabled=correction_enabled,
+            alias_enabled=correction_enabled,
+            fallback_enabled=correction_enabled,
+            fallback_min_results=prefs.search.fallback_min_results,
         )
 
         # 카드 팩토리 초기화
@@ -426,13 +435,12 @@ class MainWindow(QMainWindow):
             self._result_list.set_result(result)
 
         if result.current_page == 1:
-            if result.correction_applied:
-                detail = ""
-                if result.attempt_label and result.attempt_description:
-                    detail = f" ({result.attempt_label}: {result.attempt_description})"
-                elif result.attempt_label and result.attempt_label != "A":
-                    detail = f" ({result.attempt_label})"
-                self._correction_hint.setText(f"검색어 보정 적용됨{detail}")
+            if result.used_strategy and result.used_strategy != "original":
+                raw = result.raw_query or self._avatar_input.text().strip()
+                resolved = result.resolved_query or result.query
+                self._correction_hint.setText(
+                    f"검색어 보정 적용됨: {resolved} (원문: {raw})"
+                )
                 self._correction_hint.show()
             else:
                 self._correction_hint.hide()
@@ -482,6 +490,10 @@ class MainWindow(QMainWindow):
             price_range=price_range,
             page=1,
             raw_query=self._current_params.raw_query,
+            normalize_enabled=self._current_params.normalize_enabled,
+            alias_enabled=self._current_params.alias_enabled,
+            fallback_enabled=self._current_params.fallback_enabled,
+            fallback_min_results=self._current_params.fallback_min_results,
             normalization_enabled=self._current_params.normalization_enabled,
             allow_multi=self._current_params.allow_multi,
         )
@@ -520,6 +532,14 @@ class MainWindow(QMainWindow):
         logger.debug(f"아이템 클릭: {item.name}")
         prefs = get_prefs()
         prefs.add_recent_click(item.name, item.shop_name)
+        save_prefs(prefs)
+
+    def _on_correction_toggle(self, checked: bool) -> None:
+        """검색어 보정 토글 변경"""
+        prefs = get_prefs()
+        prefs.search.normalize_enabled = checked
+        prefs.search.alias_enabled = checked
+        prefs.search.fallback_enabled = checked
         save_prefs(prefs)
 
     def closeEvent(self, event: QCloseEvent) -> None:

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List
 
@@ -15,21 +14,6 @@ from utils.paths import get_bundled_data_dir, get_user_data_dir
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class AvatarAliasEntry:
-    """아바타 별칭 엔트리"""
-
-    canonical: str
-    variants: List[str] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "AvatarAliasEntry":
-        return cls(
-            canonical=data.get("canonical", ""),
-            variants=data.get("variants", []) or [],
-        )
 
 
 def _get_bundled_alias_path() -> Path:
@@ -40,23 +24,32 @@ def _get_user_alias_path() -> Path:
     return get_user_data_dir() / "avatar_aliases.json"
 
 
-def _load_from_file(path: Path) -> List[AvatarAliasEntry]:
+def _load_from_file(path: Path) -> Dict[str, List[str]]:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    entries: List[AvatarAliasEntry] = []
-    for item in data.get("aliases", []):
-        try:
-            entry = AvatarAliasEntry.from_dict(item)
-            if entry.canonical:
-                entries.append(entry)
-        except Exception as e:
-            logger.warning(f"별칭 파싱 실패: {e}")
+    # 레거시 포맷 지원: {"aliases": [{"canonical": "...", "variants": []}]}
+    if isinstance(data, dict) and "aliases" in data:
+        legacy_map: Dict[str, List[str]] = {}
+        for item in data.get("aliases", []):
+            canonical = str(item.get("canonical", "")).strip()
+            variants = item.get("variants", []) or []
+            if canonical:
+                legacy_map[canonical] = [str(v) for v in variants]
+        return legacy_map
 
-    return entries
+    if isinstance(data, dict):
+        # 기대 포맷: { "canonical": ["alias1", "alias2"] }
+        return {
+            str(key): [str(value) for value in (values or [])]
+            for key, values in data.items()
+            if isinstance(values, list)
+        }
+
+    return {}
 
 
-def load_avatar_aliases() -> List[AvatarAliasEntry]:
+def load_avatar_aliases() -> Dict[str, List[str]]:
     """
     아바타 별칭 목록 로드
 
@@ -67,23 +60,23 @@ def load_avatar_aliases() -> List[AvatarAliasEntry]:
     user_path = _get_user_alias_path()
     if user_path.exists():
         try:
-            entries = _load_from_file(user_path)
-            logger.info(f"사용자 별칭 데이터 로드: {len(entries)}개")
-            return entries
+            data = _load_from_file(user_path)
+            logger.info(f"사용자 별칭 데이터 로드: {len(data)}개")
+            return data
         except Exception as e:
             logger.warning(f"사용자 별칭 데이터 로드 실패: {e}")
 
     bundled_path = _get_bundled_alias_path()
     if bundled_path.exists():
         try:
-            entries = _load_from_file(bundled_path)
-            logger.info(f"번들 별칭 데이터 로드: {len(entries)}개")
-            return entries
+            data = _load_from_file(bundled_path)
+            logger.info(f"번들 별칭 데이터 로드: {len(data)}개")
+            return data
         except Exception as e:
             logger.warning(f"번들 별칭 데이터 로드 실패: {e}")
 
-    logger.info("별칭 데이터를 찾을 수 없음")
-    return []
+    logger.warning("별칭 데이터를 찾을 수 없음")
+    return {}
 
 
 def build_alias_map(normalize_fn) -> Dict[str, str]:
@@ -93,15 +86,15 @@ def build_alias_map(normalize_fn) -> Dict[str, str]:
     Args:
         normalize_fn: 정규화 함수
     """
-    entries = load_avatar_aliases()
+    aliases = load_avatar_aliases()
     alias_map: Dict[str, str] = {}
 
-    for entry in entries:
-        canonical = entry.canonical.strip()
+    for canonical, variants in aliases.items():
+        canonical = canonical.strip()
         if not canonical:
             continue
 
-        all_variants = [canonical] + list(entry.variants)
+        all_variants = [canonical] + list(variants or [])
         for variant in all_variants:
             key = normalize_fn(variant)
             if not key:

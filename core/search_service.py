@@ -18,7 +18,7 @@ from config.constants import BOOTH_CATEGORIES
 from data.avatar_data import get_popular_avatar_names
 from data.avatar_aliases import build_alias_map
 from data.relevance_config import load_relevance_config
-from utils.query_normalization import normalize_query, split_multi_query, remove_spaces
+from utils.query_normalize import normalize_query, parse_multi_query, remove_spaces
 from utils.relevance_scoring import compute_relevance_score, score_to_label, tokenize_query
 from utils.logging import get_logger, LogContext
 from utils.exceptions import BoothSearcherError
@@ -39,6 +39,7 @@ class SearchAttempt:
     label: str
     query: str
     description: str = ""
+    strategy: str = "original"
 
 
 class SearchService:
@@ -153,7 +154,7 @@ class SearchService:
         use_cache: bool = True,
         cancel_check: Optional[Callable[[], bool]] = None,
         progress_callback: Optional[Callable[[str], None]] = None,
-        min_results: int = 3,
+        min_results: Optional[int] = None,
         max_attempts: int = 3,
     ) -> SearchResult:
         """
@@ -167,21 +168,24 @@ class SearchService:
             min_results: 결과가 충분하다고 판단하는 최소 개수
             max_attempts: 최대 시도 횟수 (기본 3)
         """
-        if params.page != 1 or not params.normalization_enabled:
+        if params.page != 1 or not params.normalize_enabled:
             return self.search(params, use_cache=use_cache)
 
         raw_query = params.raw_query or params.avatar_name
         attempts = self._build_attempts(
             raw_query=raw_query,
-            normalize_enabled=params.normalization_enabled,
-            allow_multi=params.allow_multi,
-            max_attempts=max_attempts,
+            normalize_enabled=params.normalize_enabled,
+            alias_enabled=params.alias_enabled,
+            fallback_enabled=params.fallback_enabled,
+            max_attempts=min(max_attempts, 3),
         )
 
         if not attempts:
             return self.search(params, use_cache=use_cache)
 
         best_result: Optional[SearchResult] = None
+        attempts_run = 0
+        min_results = min_results or params.fallback_min_results
 
         for attempt in attempts:
             if cancel_check and cancel_check():
@@ -190,16 +194,27 @@ class SearchService:
 
             attempt_params = params.with_avatar_name(attempt.query)
 
-            if attempt.label != "A" and progress_callback:
-                progress_callback(f"검색어 보정 시도 ({attempt.label}: {attempt.description})")
+            if attempt.strategy != "original" and progress_callback:
+                progress_callback(f"검색어 보정 시도 ({attempt.strategy})")
 
+            start_time = time.perf_counter()
             result = self.search(attempt_params, use_cache=use_cache)
-            self._apply_attempt_metadata(result, raw_query, attempt)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            attempts_run += 1
+            self._apply_attempt_metadata(result, raw_query, attempt, attempts_run)
+
+            logger.info(
+                "검색 시도: strategy=%s cache=%s count=%s elapsed_ms=%.1f",
+                attempt.strategy,
+                result.cached,
+                result.total_count,
+                elapsed_ms,
+            )
 
             if best_result is None or self._result_score(result) > self._result_score(best_result):
                 best_result = result
 
-            if not self._should_retry(result, min_results=min_results):
+            if not params.fallback_enabled or not self._should_retry(result, min_results=min_results):
                 break
 
         if best_result is None:
@@ -207,7 +222,8 @@ class SearchService:
             self._apply_attempt_metadata(
                 best_result,
                 raw_query,
-                SearchAttempt(label="A", query=params.avatar_name, description=""),
+                SearchAttempt(label="A", query=params.avatar_name, description="", strategy="original"),
+                attempts_run,
             )
 
         if params.verify_mode and params.verify_top_n > 0:
@@ -217,6 +233,9 @@ class SearchService:
                 cancel_check=cancel_check,
                 progress_callback=progress_callback,
             )
+
+        params.resolved_query = best_result.resolved_query
+        params.used_strategy = best_result.used_strategy
 
         return best_result
 
@@ -243,77 +262,51 @@ class SearchService:
         self,
         raw_query: str,
         normalize_enabled: bool,
-        allow_multi: bool,
+        alias_enabled: bool,
+        fallback_enabled: bool,
         max_attempts: int,
     ) -> List[SearchAttempt]:
         raw_query = raw_query or ""
-        raw_trimmed = raw_query.strip()
-        parts = split_multi_query(raw_query) if allow_multi else [raw_query]
-        if not parts:
-            parts = [raw_query]
-
-        candidates: List[Tuple[str, str, bool]] = []
-        for part in parts:
-            original = part.strip()
-            if not original:
-                continue
-            normalized = normalize_query(original) if normalize_enabled else original
-            if not normalized:
-                continue
-            normalization_applied = normalize_enabled and normalized != original
-            candidates.append((original, normalized, normalization_applied))
-
-        if not candidates and raw_trimmed:
-            normalized = normalize_query(raw_trimmed) if normalize_enabled else raw_trimmed
-            normalization_applied = normalize_enabled and normalized != raw_trimmed
-            candidates = [(raw_trimmed, normalized, normalization_applied)]
-
-        # 중복 제거 (정규화 기준)
-        deduped: List[Tuple[str, str, bool]] = []
-        seen = set()
-        for original, normalized, normalization_applied in candidates:
-            if normalized in seen:
-                continue
-            seen.add(normalized)
-            deduped.append((original, normalized, normalization_applied))
-
-        if not deduped:
+        parsed = parse_multi_query(raw_query)
+        raw_trimmed = parsed[0] if parsed else raw_query.strip()
+        if not raw_trimmed:
             return []
 
-        attempts: List[SearchAttempt] = []
+        normalized = normalize_query(raw_trimmed) if normalize_enabled else raw_trimmed
+        normalized = normalized or raw_trimmed
 
-        _, primary_query, primary_normalized = deduped[0]
-        desc_parts = []
-        if len(deduped) > 1:
-            desc_parts.append(f"다중 입력 1/{len(deduped)} 선택")
-        if primary_normalized:
-            desc_parts.append("정규화")
-        primary_desc = ", ".join(desc_parts)
-        attempts.append(SearchAttempt(label="A", query=primary_query, description=primary_desc))
+        attempts: List[SearchAttempt] = [
+            SearchAttempt(label="A", query=raw_trimmed, description="", strategy="original"),
+        ]
 
-        # Attempt B: 공백 제거 또는 따옴표 검색
-        attempt_b = self._build_attempt_b(primary_query)
-        if attempt_b:
-            attempts.append(attempt_b)
+        if not fallback_enabled:
+            return attempts[:max_attempts]
 
-        # Attempt C: 별칭 매핑
-        attempt_c = self._build_attempt_c(primary_query, normalize_enabled)
-        if attempt_c:
-            attempts.append(attempt_c)
+        if normalize_enabled and normalized != raw_trimmed:
+            attempts.append(
+                SearchAttempt(label="B", query=normalized, description="정규화", strategy="normalized")
+            )
 
-        # 남은 시도 횟수에 한해 다른 후보를 순차 시도
-        if allow_multi and len(deduped) > 1 and len(attempts) < max_attempts:
-            for idx, (_, alt_query, alt_normalized) in enumerate(deduped[1:], start=2):
-                if len(attempts) >= max_attempts:
-                    break
-                desc_parts = [f"다중 입력 {idx}/{len(deduped)} 선택"]
-                if alt_normalized:
-                    desc_parts.append("정규화")
+        if alias_enabled:
+            canonical = self._build_alias_candidate(raw_trimmed, normalized)
+            if canonical:
                 attempts.append(
-                    SearchAttempt(label="A", query=alt_query, description=", ".join(desc_parts))
+                    SearchAttempt(label="C", query=canonical, description="별칭 매핑", strategy="alias")
                 )
 
-        # 중복 시도 제거 (동일 쿼리)
+        no_space = remove_spaces(normalized)
+        if no_space and no_space not in {raw_trimmed, normalized}:
+            attempts.append(
+                SearchAttempt(label="D", query=no_space, description="공백 제거", strategy="no-space")
+            )
+
+        if self._supports_quoted_search() and " " in normalized:
+            quoted = f"\"{normalized}\""
+            if quoted not in {raw_trimmed, normalized, no_space}:
+                attempts.append(
+                    SearchAttempt(label="E", query=quoted, description="따옴표 검색", strategy="quoted")
+                )
+
         deduped_attempts: List[SearchAttempt] = []
         seen_queries = set()
         for attempt in attempts:
@@ -324,34 +317,20 @@ class SearchService:
 
         return deduped_attempts[:max_attempts]
 
-    def _build_attempt_b(self, query: str) -> Optional[SearchAttempt]:
-        if not query:
+    def _build_alias_candidate(self, raw_query: str, normalized: str) -> Optional[str]:
+        if not raw_query:
             return None
 
-        if " " in query:
-            no_space = remove_spaces(query)
-            if no_space and no_space != query:
-                return SearchAttempt(label="B", query=no_space, description="공백 제거")
-
-        quoted = query
-        if not (query.startswith("\"") and query.endswith("\"")):
-            quoted = f"\"{query}\""
-
-        if quoted != query:
-            return SearchAttempt(label="B", query=quoted, description="따옴표 검색")
-
-        return None
-
-    def _build_attempt_c(self, query: str, normalize_enabled: bool) -> Optional[SearchAttempt]:
-        if not query or not normalize_enabled:
-            return None
-
-        key = normalize_query(query)
+        key = normalize_query(raw_query)
         canonical = self._alias_map.get(key)
-        if canonical and canonical != query:
-            return SearchAttempt(label="C", query=canonical, description="별칭 매핑")
+        if canonical and canonical not in {raw_query, normalized}:
+            return canonical
 
         return None
+
+    @staticmethod
+    def _supports_quoted_search() -> bool:
+        return True
 
     @staticmethod
     def _result_score(result: SearchResult) -> int:
@@ -369,6 +348,7 @@ class SearchService:
         result: SearchResult,
         raw_query: str,
         attempt: SearchAttempt,
+        attempts_count: int,
     ) -> None:
         raw_trimmed = raw_query.strip()
         result.raw_query = raw_query
@@ -376,10 +356,11 @@ class SearchService:
         result.query = attempt.query
         result.attempt_label = attempt.label
         result.attempt_description = attempt.description
+        result.used_strategy = attempt.strategy
+        result.attempts_count = attempts_count or 1
         result.correction_applied = (
-            attempt.label != "A"
+            attempt.strategy != "original"
             or attempt.query != raw_trimmed
-            or bool(attempt.description)
         )
 
     def _apply_relevance_scoring(

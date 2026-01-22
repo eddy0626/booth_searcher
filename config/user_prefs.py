@@ -37,6 +37,10 @@ class SearchPrefs:
     recent_clicked_titles: List[str] = field(default_factory=list)
     recent_clicked_shops: List[str] = field(default_factory=list)
     max_recent_clicked: int = 20
+    normalize_enabled: bool = True
+    alias_enabled: bool = True
+    fallback_enabled: bool = True
+    fallback_min_results: int = 5
 
 
 @dataclass
