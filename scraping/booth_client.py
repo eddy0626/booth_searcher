@@ -208,15 +208,34 @@ class BoothClient:
         Booth 검색 페이지 HTML 가져오기
 
         Args:
-            keyword: 검색 키워드
-            page: 페이지 번호
+            keyword: 검색 키워드 (1-200자)
+            page: 페이지 번호 (1-100)
             category_id: 카테고리 이름 (예: "3D Clothing", None이면 전체)
             sort: 정렬 방식 (None이면 기본)
 
         Returns:
             검색 결과 HTML
+
+        Raises:
+            ValueError: 유효하지 않은 파라미터
+            BoothClientError: 요청 실패
         """
         import urllib.parse
+
+        # 입력 검증
+        if not keyword or not keyword.strip():
+            raise ValueError("검색 키워드는 필수입니다")
+
+        keyword = keyword.strip()
+        if len(keyword) > 200:
+            raise ValueError(f"검색 키워드가 너무 깁니다 (최대 200자, 현재 {len(keyword)}자)")
+
+        if not isinstance(page, int) or page < 1:
+            raise ValueError(f"페이지 번호는 1 이상이어야 합니다 (현재: {page})")
+
+        if page > 100:
+            logger.warning(f"페이지 번호가 큽니다 ({page}), 100으로 제한합니다")
+            page = 100
 
         params: Dict[str, Any] = {"page": page}
 
@@ -241,11 +260,23 @@ class BoothClient:
         상품 상세 페이지 HTML 가져오기
 
         Args:
-            item_id: 상품 ID
+            item_id: 상품 ID (숫자 문자열)
 
         Returns:
             상품 페이지 HTML
+
+        Raises:
+            ValueError: 유효하지 않은 상품 ID
+            BoothClientError: 요청 실패
         """
+        # 입력 검증
+        if not item_id or not item_id.strip():
+            raise ValueError("상품 ID는 필수입니다")
+
+        item_id = item_id.strip()
+        if not item_id.isdigit():
+            raise ValueError(f"상품 ID는 숫자여야 합니다 (현재: {item_id})")
+
         path = f"/ko/items/{item_id}"
         response = self.get(path)
         return response.text

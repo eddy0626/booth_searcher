@@ -15,6 +15,11 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+class _WaitInterrupted(Exception):
+    """대기 중단 예외 (내부용)"""
+    pass
+
+
 class RateLimiter:
     """
     Token Bucket 기반 Rate Limiter
@@ -71,8 +76,7 @@ class RateLimiter:
         Returns:
             슬롯 획득 성공 여부
         """
-        start_time = time.monotonic()
-
+        # 1단계: 락 획득하고 대기 시간 계산
         with self._lock:
             now = time.monotonic()
             wait_time = self._calculate_wait_time(now)
@@ -82,24 +86,24 @@ class RateLimiter:
                 logger.warning(f"Rate limit timeout: 필요 대기시간 {wait_time:.2f}s > timeout {timeout}s")
                 return False
 
-            # 대기가 필요하면 대기
-            if wait_time > 0:
-                logger.debug(f"Rate limiting: {wait_time:.2f}초 대기")
-                self._total_wait_time += wait_time
+            # 대기 불필요시 즉시 슬롯 획득
+            if wait_time <= 0:
+                self.timestamps.append(now)
+                self._total_requests += 1
+                return True
 
-                # 락 해제 후 대기 (다른 스레드 블록 방지)
-                self._lock.release()
-                try:
-                    time.sleep(wait_time)
-                finally:
-                    self._lock.acquire()
+            # 대기 필요시 대기 시간 기록
+            self._total_wait_time += wait_time
 
-                now = time.monotonic()
+        # 2단계: 락 해제 상태에서 대기 (다른 스레드 블록 방지)
+        logger.debug(f"Rate limiting: {wait_time:.2f}초 대기")
+        time.sleep(wait_time)
 
-            # 타임스탬프 기록
+        # 3단계: 다시 락 획득하고 슬롯 기록
+        with self._lock:
+            now = time.monotonic()
             self.timestamps.append(now)
             self._total_requests += 1
-
             return True
 
     def _calculate_wait_time(self, now: float) -> float:

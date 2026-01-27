@@ -113,9 +113,11 @@ class ResultCache:
             SearchResult 또는 None (캐시 미스/만료)
         """
         key = params.cache_key()
-        now = time.time()
 
         with self._lock:
+            # 시간 측정은 락 획득 후 수행 (race condition 방지)
+            now = time.time()
+
             try:
                 with self._get_connection() as conn:
                     row = conn.execute(
@@ -180,13 +182,14 @@ class ResultCache:
             result: 검색 결과
         """
         key = params.cache_key()
-        now = time.time()
 
-        # 결과를 JSON으로 변환
+        # 결과를 JSON으로 변환 (락 외부에서 수행 - CPU 집약적 작업)
         data = result.to_dict()
         result_json = json.dumps(data, ensure_ascii=False)
 
         with self._lock:
+            # 시간 측정은 락 획득 후 수행 (일관성 보장)
+            now = time.time()
             try:
                 with self._get_connection() as conn:
                     conn.execute(

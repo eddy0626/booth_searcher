@@ -101,6 +101,21 @@ class SearchParams:
     page: int = 1
     per_page: int = 24
 
+    # 검색 전략 옵션
+    raw_query: Optional[str] = None  # 원본 검색어 (정규화 전)
+    normalize_enabled: bool = True  # 쿼리 정규화 활성화 여부
+    alias_enabled: bool = True  # 별칭 검색 활성화 여부
+    fallback_enabled: bool = True  # 폴백 검색 활성화 여부
+    fallback_min_results: int = 5  # 폴백 트리거 최소 결과 수
+
+    # 검증 옵션
+    verify_mode: bool = False  # 상위 결과 검증 모드
+    verify_top_n: int = 0  # 검증할 상위 결과 수
+
+    # 결과 메타데이터 (검색 후 설정됨)
+    resolved_query: Optional[str] = None  # 실제 사용된 검색어
+    used_strategy: Optional[str] = None  # 사용된 검색 전략
+
     # 최대 페이지 수 (Booth.pm 제한 및 합리적인 사용 범위)
     MAX_PAGE = 100
 
@@ -148,6 +163,15 @@ class SearchParams:
             "price_range": self.price_range.to_dict() if self.price_range else None,
             "page": self.page,
             "per_page": self.per_page,
+            "raw_query": self.raw_query,
+            "normalize_enabled": self.normalize_enabled,
+            "alias_enabled": self.alias_enabled,
+            "fallback_enabled": self.fallback_enabled,
+            "fallback_min_results": self.fallback_min_results,
+            "verify_mode": self.verify_mode,
+            "verify_top_n": self.verify_top_n,
+            "resolved_query": self.resolved_query,
+            "used_strategy": self.used_strategy,
         }
 
     @classmethod
@@ -171,6 +195,15 @@ class SearchParams:
             price_range=price_range,
             page=data.get("page", 1),
             per_page=data.get("per_page", 24),
+            raw_query=data.get("raw_query"),
+            normalize_enabled=data.get("normalize_enabled", True),
+            alias_enabled=data.get("alias_enabled", True),
+            fallback_enabled=data.get("fallback_enabled", True),
+            fallback_min_results=data.get("fallback_min_results", 5),
+            verify_mode=data.get("verify_mode", False),
+            verify_top_n=data.get("verify_top_n", 0),
+            resolved_query=data.get("resolved_query"),
+            used_strategy=data.get("used_strategy"),
         )
 
     def with_page(self, page: int) -> "SearchParams":
@@ -182,6 +215,31 @@ class SearchParams:
             price_range=self.price_range,
             page=page,
             per_page=self.per_page,
+            raw_query=self.raw_query,
+            normalize_enabled=self.normalize_enabled,
+            alias_enabled=self.alias_enabled,
+            fallback_enabled=self.fallback_enabled,
+            fallback_min_results=self.fallback_min_results,
+            verify_mode=self.verify_mode,
+            verify_top_n=self.verify_top_n,
+        )
+
+    def with_avatar_name(self, avatar_name: str) -> "SearchParams":
+        """새 아바타 이름으로 복사본 생성"""
+        return SearchParams(
+            avatar_name=avatar_name,
+            category=self.category,
+            sort=self.sort,
+            price_range=self.price_range,
+            page=self.page,
+            per_page=self.per_page,
+            raw_query=self.raw_query,
+            normalize_enabled=self.normalize_enabled,
+            alias_enabled=self.alias_enabled,
+            fallback_enabled=self.fallback_enabled,
+            fallback_min_results=self.fallback_min_results,
+            verify_mode=self.verify_mode,
+            verify_top_n=self.verify_top_n,
         )
 
     def get_search_keyword(self) -> str:
