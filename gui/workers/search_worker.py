@@ -189,10 +189,15 @@ class SearchWorker(QThread):
         """단일 페이지 검색"""
         self.progress.emit(params.page, params.page, f"페이지 {params.page} 로딩...")
 
-        return self.search_service.search(
-            params,
-            use_cache=self._use_cache,
-        )
+        if params.page == 1:
+            return self.search_service.search_with_fallback(
+                params,
+                use_cache=self._use_cache,
+                cancel_check=self.is_cancelled,
+                progress_callback=self._emit_fallback_progress,
+            )
+
+        return self.search_service.search(params, use_cache=self._use_cache)
 
     def _search_all_pages(self, params: SearchParams) -> SearchResult:
         """
@@ -203,13 +208,22 @@ class SearchWorker(QThread):
         # 첫 페이지
         self.progress.emit(1, self._max_pages, f"페이지 1 로딩...")
 
-        result = self.search_service.search(
-            params,
-            use_cache=self._use_cache,
-        )
+        if params.page == 1:
+            result = self.search_service.search_with_fallback(
+                params,
+                use_cache=self._use_cache,
+                cancel_check=self.is_cancelled,
+                progress_callback=self._emit_fallback_progress,
+            )
+        else:
+            result = self.search_service.search(params, use_cache=self._use_cache)
 
         if result.is_empty or not result.has_next:
             return result
+
+        # 첫 결과의 보정된 쿼리로 페이지 로드
+        if result.resolved_query:
+            params = params.with_avatar_name(result.resolved_query)
 
         # 총 페이지 수 계산
         total_pages = min(self._max_pages, result.total_pages)
@@ -244,6 +258,10 @@ class SearchWorker(QThread):
             current_page += 1
 
         return result
+
+    def _emit_fallback_progress(self, message: str) -> None:
+        """보정 검색 진행 메시지"""
+        self.progress.emit(0, 0, message)
 
     def get_service_stats(self) -> dict:
         """검색 서비스 통계"""

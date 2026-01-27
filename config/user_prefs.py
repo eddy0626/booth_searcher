@@ -34,6 +34,13 @@ class SearchPrefs:
     last_category: str = "전체"
     recent_searches: List[str] = field(default_factory=list)
     max_recent: int = 10
+    recent_clicked_titles: List[str] = field(default_factory=list)
+    recent_clicked_shops: List[str] = field(default_factory=list)
+    max_recent_clicked: int = 20
+    normalize_enabled: bool = True
+    alias_enabled: bool = True
+    fallback_enabled: bool = True
+    fallback_min_results: int = 5
 
 
 @dataclass
@@ -101,6 +108,26 @@ class UserPrefs:
             self.search.recent_searches = self.search.recent_searches[
                 : self.search.max_recent
             ]
+
+    def add_recent_click(self, title: str, shop_name: str = "") -> None:
+        """최근 클릭 상품/샵 추가"""
+        if title:
+            if title in self.search.recent_clicked_titles:
+                self.search.recent_clicked_titles.remove(title)
+            self.search.recent_clicked_titles.insert(0, title)
+            if len(self.search.recent_clicked_titles) > self.search.max_recent_clicked:
+                self.search.recent_clicked_titles = self.search.recent_clicked_titles[
+                    : self.search.max_recent_clicked
+                ]
+
+        if shop_name:
+            if shop_name in self.search.recent_clicked_shops:
+                self.search.recent_clicked_shops.remove(shop_name)
+            self.search.recent_clicked_shops.insert(0, shop_name)
+            if len(self.search.recent_clicked_shops) > self.search.max_recent_clicked:
+                self.search.recent_clicked_shops = self.search.recent_clicked_shops[
+                    : self.search.max_recent_clicked
+                ]
 
     def clear_recent_searches(self) -> None:
         """최근 검색어 삭제"""
