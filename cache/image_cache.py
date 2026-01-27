@@ -40,6 +40,9 @@ class ImageCache:
         cache.clear()
     """
 
+    # 디스크 크기 캐시 만료 시간 (초)
+    DISK_SIZE_CACHE_TTL = 300  # 5분
+
     def __init__(self, settings: Optional[Settings] = None):
         if settings is None:
             settings = Settings()
@@ -55,6 +58,10 @@ class ImageCache:
         self.disk_max_size = settings.cache.image_disk_mb * 1024 * 1024
         self._disk_dir = get_image_cache_dir()
         self._disk_dir.mkdir(parents=True, exist_ok=True)
+
+        # 디스크 크기 캐시 (O(n) 스캔 최적화)
+        self._disk_size_cache = 0
+        self._disk_size_cache_time = 0.0
 
         # 스레드 안전성
         self._lock = threading.RLock()
@@ -93,21 +100,24 @@ class ImageCache:
                 return self._memory_cache[key]
 
         # 2. 디스크 캐시 확인 (락 외부에서 I/O)
+        # Race condition 방지: exists() 체크 없이 바로 읽기 시도
         disk_path = self._disk_dir / key
-        if disk_path.exists():
-            try:
-                data = disk_path.read_bytes()
+        try:
+            data = disk_path.read_bytes()
 
-                # 메모리 캐시에 추가
-                with self._lock:
-                    self._add_to_memory(key, data)
-                    self._hits += 1
+            # 메모리 캐시에 추가
+            with self._lock:
+                self._add_to_memory(key, data)
+                self._hits += 1
 
-                logger.debug(f"Disk cache hit: {key[:8]}...")
-                return data
+            logger.debug(f"Disk cache hit: {key[:8]}...")
+            return data
 
-            except IOError as e:
-                logger.warning(f"Disk cache read failed: {e}")
+        except FileNotFoundError:
+            # 파일이 없으면 캐시 미스 (정상 케이스)
+            pass
+        except IOError as e:
+            logger.warning(f"Disk cache read failed: {e}")
 
         with self._lock:
             self._misses += 1
@@ -202,21 +212,36 @@ class ImageCache:
 
     def clear(self) -> None:
         """캐시 전체 삭제"""
-        # 메모리 캐시 삭제
+        disk_errors = []
+
+        # 1. 디스크 캐시 먼저 삭제 (실패해도 개별 파일 계속 시도)
+        try:
+            for f in self._disk_dir.glob("*"):
+                if f.is_file():
+                    try:
+                        f.unlink()
+                    except IOError as e:
+                        disk_errors.append(str(e))
+        except IOError as e:
+            disk_errors.append(f"Directory scan failed: {e}")
+
+        # 2. 메모리 캐시 삭제 (디스크 결과와 무관하게 항상 실행)
         with self._lock:
             self._memory_cache.clear()
             self._memory_size = 0
             self._hits = 0
             self._misses = 0
+            # 디스크 크기 캐시 초기화
+            self._disk_size_cache = 0
+            self._disk_size_cache_time = 0.0
 
-        # 디스크 캐시 삭제
-        try:
-            for f in self._disk_dir.glob("*"):
-                if f.is_file():
-                    f.unlink()
+        # 3. 결과 로깅
+        if disk_errors:
+            logger.warning(f"Disk cache clear partial failure: {len(disk_errors)} errors")
+            for err in disk_errors[:3]:  # 처음 3개만 로깅
+                logger.debug(f"  - {err}")
+        else:
             logger.info("Image cache cleared")
-        except IOError as e:
-            logger.warning(f"Disk cache clear failed: {e}")
 
     def clear_memory(self) -> None:
         """메모리 캐시만 삭제"""
@@ -225,16 +250,38 @@ class ImageCache:
             self._memory_size = 0
             logger.info("Memory cache cleared")
 
+    def _get_disk_size_cached(self) -> int:
+        """디스크 캐시 크기 반환 (캐시된 값 사용, TTL 기반 갱신)"""
+        current_time = time.time()
+
+        # 캐시가 유효하면 그대로 반환
+        if current_time - self._disk_size_cache_time < self.DISK_SIZE_CACHE_TTL:
+            return self._disk_size_cache
+
+        # 캐시 만료 - 다시 계산
+        return self._recalculate_disk_size()
+
+    def _recalculate_disk_size(self) -> int:
+        """디스크 캐시 크기 재계산"""
+        try:
+            disk_size = sum(
+                f.stat().st_size for f in self._disk_dir.glob("*") if f.is_file()
+            )
+            self._disk_size_cache = disk_size
+            self._disk_size_cache_time = time.time()
+            return disk_size
+        except IOError as e:
+            logger.warning(f"디스크 크기 계산 실패: {e}")
+            return self._disk_size_cache  # 이전 캐시 값 반환
+
     def get_stats(self) -> dict:
         """캐시 통계 반환"""
         with self._lock:
             total = self._hits + self._misses
             hit_rate = (self._hits / total * 100) if total > 0 else 0
 
-            # 디스크 캐시 크기 계산
-            disk_size = sum(
-                f.stat().st_size for f in self._disk_dir.glob("*") if f.is_file()
-            )
+            # 디스크 캐시 크기 (캐시된 값 사용)
+            disk_size = self._get_disk_size_cached()
 
             return {
                 "memory_size_mb": round(self._memory_size / 1024 / 1024, 2),

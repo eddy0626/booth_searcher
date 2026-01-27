@@ -12,6 +12,7 @@ from typing import Optional
 from pathlib import Path
 import json
 import os
+import threading
 
 from .constants import (
     DEFAULT_TIMEOUT,
@@ -42,6 +43,38 @@ class ScrapingSettings:
     requests_per_minute: int = DEFAULT_REQUESTS_PER_MINUTE
     burst_limit: int = DEFAULT_BURST_LIMIT
 
+    def __post_init__(self):
+        """유효성 검사 및 값 보정"""
+        # timeout: 최소 1초, 최대 120초
+        if self.timeout < 1:
+            self.timeout = DEFAULT_TIMEOUT
+        elif self.timeout > 120:
+            self.timeout = 120
+
+        # max_retries: 최소 0, 최대 10
+        if self.max_retries < 0:
+            self.max_retries = 0
+        elif self.max_retries > 10:
+            self.max_retries = 10
+
+        # backoff_factor: 최소 0.1, 최대 10.0
+        if self.backoff_factor < 0.1:
+            self.backoff_factor = DEFAULT_BACKOFF_FACTOR
+        elif self.backoff_factor > 10.0:
+            self.backoff_factor = 10.0
+
+        # requests_per_minute: 최소 1, 최대 120
+        if self.requests_per_minute < 1:
+            self.requests_per_minute = DEFAULT_REQUESTS_PER_MINUTE
+        elif self.requests_per_minute > 120:
+            self.requests_per_minute = 120
+
+        # burst_limit: 최소 1, 최대 requests_per_minute
+        if self.burst_limit < 1:
+            self.burst_limit = 1
+        elif self.burst_limit > self.requests_per_minute:
+            self.burst_limit = self.requests_per_minute
+
     @classmethod
     def from_dict(cls, data: dict) -> "ScrapingSettings":
         return cls(
@@ -61,6 +94,26 @@ class CacheSettings:
     image_disk_mb: int = DEFAULT_IMAGE_CACHE_DISK_MB
     result_ttl_minutes: int = DEFAULT_RESULT_CACHE_TTL_MINUTES
 
+    def __post_init__(self):
+        """유효성 검사 및 값 보정"""
+        # image_memory_mb: 최소 10MB, 최대 500MB
+        if self.image_memory_mb < 10:
+            self.image_memory_mb = 10
+        elif self.image_memory_mb > 500:
+            self.image_memory_mb = 500
+
+        # image_disk_mb: 최소 50MB, 최대 5000MB
+        if self.image_disk_mb < 50:
+            self.image_disk_mb = 50
+        elif self.image_disk_mb > 5000:
+            self.image_disk_mb = 5000
+
+        # result_ttl_minutes: 최소 1분, 최대 1440분 (1일)
+        if self.result_ttl_minutes < 1:
+            self.result_ttl_minutes = 1
+        elif self.result_ttl_minutes > 1440:
+            self.result_ttl_minutes = 1440
+
     @classmethod
     def from_dict(cls, data: dict) -> "CacheSettings":
         return cls(
@@ -78,6 +131,32 @@ class UISettings:
     image_load_workers: int = DEFAULT_IMAGE_LOAD_WORKERS
     window_width: int = DEFAULT_WINDOW_WIDTH
     window_height: int = DEFAULT_WINDOW_HEIGHT
+
+    def __post_init__(self):
+        """유효성 검사 및 값 보정"""
+        # items_per_page: 최소 6, 최대 100
+        if self.items_per_page < 6:
+            self.items_per_page = 6
+        elif self.items_per_page > 100:
+            self.items_per_page = 100
+
+        # image_load_workers: 최소 1, 최대 16
+        if self.image_load_workers < 1:
+            self.image_load_workers = 1
+        elif self.image_load_workers > 16:
+            self.image_load_workers = 16
+
+        # window_width: 최소 400, 최대 4000
+        if self.window_width < 400:
+            self.window_width = 400
+        elif self.window_width > 4000:
+            self.window_width = 4000
+
+        # window_height: 최소 300, 최대 3000
+        if self.window_height < 300:
+            self.window_height = 300
+        elif self.window_height > 3000:
+            self.window_height = 3000
 
     @classmethod
     def from_dict(cls, data: dict) -> "UISettings":
@@ -228,28 +307,33 @@ class Settings:
 
 # 전역 설정 인스턴스 (싱글톤 패턴)
 _settings_instance: Optional[Settings] = None
+_settings_lock = threading.Lock()
 
 
 def get_settings() -> Settings:
     """
-    전역 설정 인스턴스 반환 (싱글톤)
+    전역 설정 인스턴스 반환 (싱글톤, thread-safe)
 
     Returns:
         Settings 인스턴스
     """
     global _settings_instance
     if _settings_instance is None:
-        _settings_instance = Settings.load()
+        with _settings_lock:
+            # Double-checked locking
+            if _settings_instance is None:
+                _settings_instance = Settings.load()
     return _settings_instance
 
 
 def reload_settings() -> Settings:
     """
-    설정 다시 로드
+    설정 다시 로드 (thread-safe)
 
     Returns:
         새로 로드된 Settings 인스턴스
     """
     global _settings_instance
-    _settings_instance = Settings.load()
+    with _settings_lock:
+        _settings_instance = Settings.load()
     return _settings_instance

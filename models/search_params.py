@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SortOrder(Enum):
@@ -98,13 +101,20 @@ class SearchParams:
     page: int = 1
     per_page: int = 24
 
+    # 최대 페이지 수 (Booth.pm 제한 및 합리적인 사용 범위)
+    MAX_PAGE = 100
+
     def __post_init__(self):
         """초기화 후 유효성 검사"""
         self.avatar_name = self.avatar_name.strip()
         if self.page < 1:
             self.page = 1
+        elif self.page > self.MAX_PAGE:
+            self.page = self.MAX_PAGE
         if self.per_page < 1:
             self.per_page = 24
+        elif self.per_page > 100:
+            self.per_page = 100
 
     def cache_key(self) -> str:
         """
@@ -147,8 +157,8 @@ class SearchParams:
         if data.get("sort"):
             try:
                 sort = SortOrder(data["sort"])
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.debug(f"정렬 순서 파싱 실패: {data.get('sort')} - {e}")
 
         price_range = None
         if data.get("price_range"):

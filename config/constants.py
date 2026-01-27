@@ -32,13 +32,13 @@ DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_LOG_FILE_SIZE_MB = 10
 DEFAULT_LOG_BACKUP_COUNT = 3
 
-# VRChat 관련 카테고리
+# VRChat 관련 카테고리 (Booth URL 경로에 사용되는 영어 이름)
 BOOTH_CATEGORIES = {
     "전체": "",
-    "3D 의상": "208",
-    "3D 캐릭터": "217",
-    "3D 액세서리": "209",
-    "3D 모델": "207",
+    "3D 의상": "3D Clothing",
+    "3D 캐릭터": "3D Characters",
+    "3D 액세서리": "3D Accessories",
+    "3D 모델": "3D Models",
 }
 
 # User-Agent 풀 (로테이션용)

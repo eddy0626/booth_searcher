@@ -12,11 +12,13 @@ import logging.handlers
 from pathlib import Path
 from typing import Optional
 import sys
+import threading
 
 from .paths import get_log_dir
 
-# 초기화 상태 플래그
+# 초기화 상태 플래그 (thread-safe)
 _initialized = False
+_init_lock = threading.Lock()
 
 # 기본 설정값
 DEFAULT_LOG_LEVEL = "INFO"
@@ -34,7 +36,7 @@ def setup_logging(
     log_file: Optional[Path] = None,
 ) -> None:
     """
-    로깅 시스템 초기화
+    로깅 시스템 초기화 (thread-safe)
 
     Args:
         level: 로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -45,55 +47,60 @@ def setup_logging(
     """
     global _initialized
 
+    # Double-checked locking for thread safety
     if _initialized:
         return
 
-    # 루트 로거 설정
-    root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    with _init_lock:
+        if _initialized:
+            return
 
-    # 기존 핸들러 제거
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
+        # 루트 로거 설정
+        root_logger = logging.getLogger()
+        root_logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
-    # 포맷터 생성
-    formatter = logging.Formatter(
-        fmt=DEFAULT_LOG_FORMAT,
-        datefmt=DEFAULT_DATE_FORMAT,
-    )
+        # 기존 핸들러 제거
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
 
-    # 콘솔 핸들러
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(getattr(logging, level.upper(), logging.INFO))
-    root_logger.addHandler(console_handler)
-
-    # 파일 핸들러 (로테이션)
-    if file_enabled:
-        if log_file is None:
-            log_file = get_log_dir() / "app.log"
-
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_file,
-            maxBytes=max_file_size_mb * 1024 * 1024,
-            backupCount=backup_count,
-            encoding="utf-8",
+        # 포맷터 생성
+        formatter = logging.Formatter(
+            fmt=DEFAULT_LOG_FORMAT,
+            datefmt=DEFAULT_DATE_FORMAT,
         )
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.DEBUG)  # 파일에는 모든 레벨 기록
-        root_logger.addHandler(file_handler)
 
-    # 외부 라이브러리 로깅 레벨 조정 (노이즈 감소)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("requests").setLevel(logging.WARNING)
-    logging.getLogger("PIL").setLevel(logging.WARNING)
-    logging.getLogger("PyQt6").setLevel(logging.WARNING)
+        # 콘솔 핸들러
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(getattr(logging, level.upper(), logging.INFO))
+        root_logger.addHandler(console_handler)
 
-    _initialized = True
+        # 파일 핸들러 (로테이션)
+        if file_enabled:
+            if log_file is None:
+                log_file = get_log_dir() / "app.log"
 
-    # 초기화 완료 로그
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file,
+                maxBytes=max_file_size_mb * 1024 * 1024,
+                backupCount=backup_count,
+                encoding="utf-8",
+            )
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(logging.DEBUG)  # 파일에는 모든 레벨 기록
+            root_logger.addHandler(file_handler)
+
+        # 외부 라이브러리 로깅 레벨 조정 (노이즈 감소)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("requests").setLevel(logging.WARNING)
+        logging.getLogger("PIL").setLevel(logging.WARNING)
+        logging.getLogger("PyQt6").setLevel(logging.WARNING)
+
+        _initialized = True
+
+    # 초기화 완료 로그 (락 외부에서 실행)
     logger = get_logger(__name__)
     logger.info(f"로깅 시스템 초기화 완료 (레벨: {level})")
     if file_enabled:

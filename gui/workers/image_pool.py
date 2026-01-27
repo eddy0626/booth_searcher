@@ -296,8 +296,8 @@ class ImageLoaderPool(QObject):
         # 모든 요청 취소
         self.cancel_all()
 
-        # 스레드 풀 종료
-        self._executor.shutdown(wait=False)
+        # 스레드 풀 종료 (진행 중인 작업 완료 대기)
+        self._executor.shutdown(wait=True, cancel_futures=True)
 
         # 자체 생성한 캐시면 정리
         if self._own_cache:

@@ -5,6 +5,7 @@
 """
 
 from typing import Optional
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -18,6 +19,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QStatusBar,
     QMessageBox,
+    QFileDialog,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QCloseEvent
@@ -26,6 +28,7 @@ from models.search_params import SearchParams, SortOrder, PriceRange
 from models.search_result import SearchResult
 from models.booth_item import BoothItem
 from core.search_service import SearchService
+from core.exporter import ResultExporter, get_default_export_filename
 from config.settings import Settings
 from config.constants import BOOTH_CATEGORIES
 from utils.logging import get_logger
@@ -35,8 +38,34 @@ from .workers.image_pool import ImageLoaderPool
 from .widgets.result_list import ResultList
 from .widgets.filter_panel import FilterPanel
 from .widgets.item_card import ItemCard, ItemCardFactory
+from .themes import ThemeMode, get_theme, generate_stylesheet, is_system_dark_mode
 
 logger = get_logger(__name__)
+
+
+class ThemeToggleButton(QPushButton):
+    """테마 토글 버튼"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(36, 36)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._is_dark = False
+        self._update_icon()
+
+    def set_dark_mode(self, is_dark: bool) -> None:
+        """다크 모드 설정"""
+        self._is_dark = is_dark
+        self._update_icon()
+
+    def _update_icon(self) -> None:
+        """아이콘 업데이트"""
+        if self._is_dark:
+            self.setText("\u2600")  # ☀ (라이트 모드로 전환)
+            self.setToolTip("라이트 모드로 전환")
+        else:
+            self.setText("\u263D")  # ☽ (다크 모드로 전환)
+            self.setToolTip("다크 모드로 전환")
 
 
 class MainWindow(QMainWindow):
@@ -70,10 +99,13 @@ class MainWindow(QMainWindow):
         self._current_params: Optional[SearchParams] = None
         self._current_result: Optional[SearchResult] = None
 
+        # 테마 상태
+        self._theme_mode = ThemeMode.DARK if is_system_dark_mode() else ThemeMode.LIGHT
+
         # UI 구성
         self._setup_ui()
         self._connect_signals()
-        self._apply_styles()
+        self._apply_theme()
 
         logger.info("MainWindow 초기화")
 
@@ -90,11 +122,36 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        # === 제목 ===
+        # === 제목 영역 ===
+        title_layout = QHBoxLayout()
+        title_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 왼쪽 여백
+        title_layout.addStretch()
+
+        # 제목
         title_label = QLabel("Booth VRChat 의상 검색기")
         title_label.setObjectName("titleLabel")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(title_label)
+        title_layout.addWidget(title_label)
+
+        # 오른쪽 버튼들
+        title_layout.addStretch()
+
+        # 내보내기 버튼
+        self._export_btn = QPushButton("내보내기")
+        self._export_btn.setObjectName("exportButton")
+        self._export_btn.setFixedWidth(80)
+        self._export_btn.setEnabled(False)
+        title_layout.addWidget(self._export_btn)
+
+        # 테마 토글 버튼
+        self._theme_btn = ThemeToggleButton()
+        self._theme_btn.setObjectName("themeButton")
+        self._theme_btn.set_dark_mode(self._theme_mode == ThemeMode.DARK)
+        title_layout.addWidget(self._theme_btn)
+
+        main_layout.addLayout(title_layout)
 
         # === 검색 영역 ===
         search_frame = self._create_search_frame()
@@ -212,92 +269,21 @@ class MainWindow(QMainWindow):
         self._result_list.load_more.connect(self._on_load_more)
         self._result_list.item_clicked.connect(self._on_item_clicked)
 
-    def _apply_styles(self) -> None:
-        """스타일 적용"""
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f5f5;
-            }
+        # 테마 토글
+        self._theme_btn.clicked.connect(self._on_toggle_theme)
 
-            #titleLabel {
-                font-size: 20px;
-                font-weight: bold;
-                color: #333;
-                padding: 10px;
-            }
+        # 내보내기
+        self._export_btn.clicked.connect(self._on_export)
 
-            #searchFrame {
-                background-color: white;
-                border-radius: 10px;
-                border: 1px solid #e0e0e0;
-            }
+    def _apply_theme(self) -> None:
+        """테마 적용"""
+        theme = get_theme(self._theme_mode)
+        stylesheet = generate_stylesheet(theme)
+        self.setStyleSheet(stylesheet)
 
-            QLineEdit {
-                padding: 10px;
-                border: 2px solid #ddd;
-                border-radius: 6px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border-color: #ff6b6b;
-            }
-
-            QComboBox {
-                padding: 8px;
-                border: 2px solid #ddd;
-                border-radius: 6px;
-                font-size: 14px;
-                background: white;
-            }
-            QComboBox:focus {
-                border-color: #ff6b6b;
-            }
-
-            #searchButton {
-                padding: 10px 20px;
-                background-color: #ff6b6b;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            #searchButton:hover {
-                background-color: #ff5252;
-            }
-            #searchButton:pressed {
-                background-color: #e04545;
-            }
-            #searchButton:disabled {
-                background-color: #ccc;
-            }
-
-            #cancelButton {
-                padding: 10px 15px;
-                background-color: #888;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-            }
-            #cancelButton:hover {
-                background-color: #666;
-            }
-
-            #statusLabel {
-                color: #666;
-                font-size: 13px;
-                padding: 5px;
-            }
-
-            QProgressBar {
-                border: none;
-                background-color: #e0e0e0;
-            }
-            QProgressBar::chunk {
-                background-color: #ff6b6b;
-            }
-        """)
+        # 테마 버튼 상태 업데이트
+        if hasattr(self, '_theme_btn'):
+            self._theme_btn.set_dark_mode(self._theme_mode == ThemeMode.DARK)
 
     def _on_popular_selected(self, text: str) -> None:
         """인기 아바타 선택"""
@@ -363,12 +349,14 @@ class MainWindow(QMainWindow):
         if result.is_empty:
             self._status_label.setText("검색 결과가 없습니다.")
             self._result_list.clear()
+            self._export_btn.setEnabled(False)
         else:
             self._status_label.setText(
                 f"'{result.query}' 검색 결과: "
                 f"{len(result.items)}개 (전체 {result.total_count}개)"
             )
             self._result_list.set_result(result)
+            self._export_btn.setEnabled(True)
 
         # 상태 바 업데이트
         stats = self._search_service.get_stats()
@@ -448,6 +436,59 @@ class MainWindow(QMainWindow):
     def _on_item_clicked(self, item: BoothItem) -> None:
         """아이템 클릭"""
         logger.debug(f"아이템 클릭: {item.name}")
+
+    def _on_toggle_theme(self) -> None:
+        """테마 토글"""
+        if self._theme_mode == ThemeMode.LIGHT:
+            self._theme_mode = ThemeMode.DARK
+        else:
+            self._theme_mode = ThemeMode.LIGHT
+
+        self._apply_theme()
+        logger.debug(f"테마 변경: {self._theme_mode.value}")
+
+    def _on_export(self) -> None:
+        """검색 결과 내보내기"""
+        if self._current_result is None or self._current_result.is_empty:
+            QMessageBox.warning(self, "내보내기 오류", "내보낼 검색 결과가 없습니다.")
+            return
+
+        # 파일 형식 선택
+        file_filter = "CSV 파일 (*.csv);;JSON 파일 (*.json)"
+        default_name = get_default_export_filename(
+            self._current_result.query, "csv"
+        )
+
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "검색 결과 내보내기",
+            default_name,
+            file_filter,
+        )
+
+        if not file_path:
+            return
+
+        path = Path(file_path)
+        exporter = ResultExporter()
+
+        if "csv" in selected_filter.lower():
+            success = exporter.export_csv(self._current_result, path)
+        else:
+            success = exporter.export_json(self._current_result, path)
+
+        if success:
+            QMessageBox.information(
+                self,
+                "내보내기 완료",
+                f"검색 결과가 저장되었습니다.\n{path}",
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "내보내기 실패",
+                "파일 저장 중 오류가 발생했습니다.",
+            )
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """창 닫기 이벤트"""

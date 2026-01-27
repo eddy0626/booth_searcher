@@ -20,6 +20,7 @@ from PyQt6.QtGui import QResizeEvent
 from models.search_result import SearchResult
 from models.booth_item import BoothItem
 from utils.logging import get_logger
+from .skeleton_card import SkeletonGrid
 
 logger = get_logger(__name__)
 
@@ -127,6 +128,11 @@ class ResultList(QScrollArea):
         """)
         self._status_label.hide()
         self._layout.addWidget(self._status_label)
+
+        # 스켈레톤 로딩 그리드
+        self._skeleton_grid = SkeletonGrid(count=8)
+        self._skeleton_grid.hide()
+        self._layout.addWidget(self._skeleton_grid)
 
         # 로딩 인디케이터
         self._loading_label = QLabel("더 불러오는 중...")
@@ -287,18 +293,25 @@ class ResultList(QScrollArea):
 
     def _show_status(self, message: str) -> None:
         """상태 메시지 표시"""
+        self._skeleton_grid.stop_all()
+        self._skeleton_grid.hide()
         self._status_label.setText(message)
         self._status_label.show()
         self._grid_widget.hide()
 
     def _hide_status(self) -> None:
         """상태 메시지 숨김"""
+        self._skeleton_grid.stop_all()
+        self._skeleton_grid.hide()
         self._status_label.hide()
         self._grid_widget.show()
 
     def show_loading(self) -> None:
-        """로딩 상태 표시"""
-        self._show_status("검색 중...")
+        """로딩 상태 표시 (스켈레톤 애니메이션)"""
+        self._status_label.hide()
+        self._grid_widget.hide()
+        self._skeleton_grid.show()
+        self._skeleton_grid.start_all()
 
     def show_error(self, message: str) -> None:
         """에러 메시지 표시"""

@@ -210,7 +210,7 @@ class BoothClient:
         Args:
             keyword: 검색 키워드
             page: 페이지 번호
-            category_id: 카테고리 ID (None이면 전체)
+            category_id: 카테고리 이름 (예: "3D Clothing", None이면 전체)
             sort: 정렬 방식 (None이면 기본)
 
         Returns:
@@ -218,13 +218,17 @@ class BoothClient:
         """
         import urllib.parse
 
-        encoded_keyword = urllib.parse.quote(keyword)
-        path = f"/ko/search/{encoded_keyword}"
-
         params: Dict[str, Any] = {"page": page}
 
         if category_id:
-            params["category"] = category_id
+            # 카테고리가 지정된 경우: /ko/browse/{category}?q={keyword}
+            encoded_category = urllib.parse.quote(category_id)
+            path = f"/ko/browse/{encoded_category}"
+            params["q"] = keyword
+        else:
+            # 전체 검색: /ko/search/{keyword}
+            encoded_keyword = urllib.parse.quote(keyword)
+            path = f"/ko/search/{encoded_keyword}"
 
         if sort:
             params["sort"] = sort

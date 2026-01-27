@@ -275,7 +275,7 @@ class ItemParser(BaseParser):
                 try:
                     return int(data_count)
                 except ValueError:
-                    pass
+                    logger.debug(f"좋아요 수 파싱 실패 (data 속성): {data_count}")
 
             # 텍스트에서 숫자 추출
             text = likes_elem.get_text(strip=True)
@@ -284,7 +284,7 @@ class ItemParser(BaseParser):
                 try:
                     return int(numbers[0])
                 except ValueError:
-                    pass
+                    logger.debug(f"좋아요 수 파싱 실패 (텍스트): {numbers[0]}")
 
         return 0
 
@@ -300,7 +300,7 @@ class ItemParser(BaseParser):
                 try:
                     return int(data_count)
                 except ValueError:
-                    pass
+                    logger.debug(f"결과 수 파싱 실패 (data 속성): {data_count}")
 
             # 텍스트에서 숫자 추출
             text = count_elem.get_text()
@@ -309,17 +309,19 @@ class ItemParser(BaseParser):
                 try:
                     return int(numbers[0].replace(",", ""))
                 except ValueError:
-                    pass
+                    logger.debug(f"결과 수 파싱 실패 (텍스트): {numbers[0]}")
 
         # 2. "件" 포함 텍스트에서 추출 (Booth 한국어 페이지)
+        # "7727件" 형식으로 숫자+件 패턴을 직접 매칭 (3D 등의 숫자 오인식 방지)
         for elem in soup.find_all(string=lambda t: t and "件" in t):
             text = elem.strip()
-            numbers = re.findall(r"[\d,]+", text)
-            if numbers:
+            # 숫자+件 패턴 직접 매칭
+            count_match = re.search(r"([\d,]+)件", text)
+            if count_match:
                 try:
-                    return int(numbers[0].replace(",", ""))
+                    return int(count_match.group(1).replace(",", ""))
                 except ValueError:
-                    pass
+                    logger.debug(f"결과 수 파싱 실패 (件 텍스트): {count_match.group(1)}")
 
         # 3. "개" 또는 "results" 포함 텍스트에서 추출
         for pattern in ["개", "results", "items"]:
@@ -330,7 +332,7 @@ class ItemParser(BaseParser):
                     try:
                         return int(numbers[0].replace(",", ""))
                     except ValueError:
-                        pass
+                        logger.debug(f"결과 수 파싱 실패 ({pattern} 텍스트): {numbers[0]}")
 
         return 0
 

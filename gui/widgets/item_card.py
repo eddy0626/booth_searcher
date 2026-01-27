@@ -12,11 +12,13 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QSizePolicy,
+    QPushButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QFont, QMouseEvent
 
 from models.booth_item import BoothItem, PriceType
+from models.favorite import get_favorites_storage
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -45,6 +47,7 @@ class ItemCard(QFrame):
 
     # 시그널
     clicked = pyqtSignal(BoothItem)
+    favorite_toggled = pyqtSignal(BoothItem, bool)  # item, is_favorite
 
     # 크기 상수
     CARD_WIDTH = 200
@@ -56,6 +59,8 @@ class ItemCard(QFrame):
 
         self.item = item
         self._thumbnail_loaded = False
+        self._favorites = get_favorites_storage()
+        self._is_favorite = self._favorites.is_favorite(item.id)
 
         self._setup_ui()
         self._apply_style()
@@ -70,9 +75,29 @@ class ItemCard(QFrame):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
+        # 썸네일 컨테이너 (즐겨찾기 버튼 오버레이용)
+        thumbnail_container = QFrame()
+        thumbnail_container.setFixedSize(self.THUMBNAIL_SIZE, self.THUMBNAIL_SIZE)
+        thumbnail_layout = QVBoxLayout(thumbnail_container)
+        thumbnail_layout.setContentsMargins(0, 0, 0, 0)
+        thumbnail_layout.setSpacing(0)
+
+        # 즐겨찾기 버튼 (우상단)
+        fav_row = QHBoxLayout()
+        fav_row.setContentsMargins(4, 4, 4, 0)
+        fav_row.addStretch()
+        self._favorite_btn = QPushButton()
+        self._favorite_btn.setObjectName("favoriteButton")
+        self._favorite_btn.setFixedSize(28, 28)
+        self._favorite_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._favorite_btn.clicked.connect(self._toggle_favorite)
+        self._update_favorite_button()
+        fav_row.addWidget(self._favorite_btn)
+        thumbnail_layout.addLayout(fav_row)
+
         # 썸네일
         self._thumbnail_label = QLabel()
-        self._thumbnail_label.setFixedSize(self.THUMBNAIL_SIZE, self.THUMBNAIL_SIZE)
+        self._thumbnail_label.setFixedSize(self.THUMBNAIL_SIZE, self.THUMBNAIL_SIZE - 32)
         self._thumbnail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumbnail_label.setStyleSheet("""
             QLabel {
@@ -81,7 +106,9 @@ class ItemCard(QFrame):
             }
         """)
         self._thumbnail_label.setText("로딩중...")
-        layout.addWidget(self._thumbnail_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        thumbnail_layout.addWidget(self._thumbnail_label)
+
+        layout.addWidget(thumbnail_container, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # 상품명
         self._name_label = QLabel(self._truncate_text(self.item.name, 35))
@@ -206,6 +233,57 @@ class ItemCard(QFrame):
     def is_thumbnail_loaded(self) -> bool:
         """썸네일 로드 여부"""
         return self._thumbnail_loaded
+
+    def _toggle_favorite(self) -> None:
+        """즐겨찾기 토글"""
+        if self._is_favorite:
+            self._favorites.remove(self.item.id)
+            self._is_favorite = False
+            logger.debug(f"즐겨찾기 제거: {self.item.name}")
+        else:
+            self._favorites.add(self.item)
+            self._is_favorite = True
+            logger.debug(f"즐겨찾기 추가: {self.item.name}")
+
+        self._update_favorite_button()
+        self.favorite_toggled.emit(self.item, self._is_favorite)
+
+    def _update_favorite_button(self) -> None:
+        """즐겨찾기 버튼 업데이트"""
+        if self._is_favorite:
+            self._favorite_btn.setText("\u2764")  # ❤
+            self._favorite_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(255, 107, 107, 0.9);
+                    color: white;
+                    border: none;
+                    border-radius: 14px;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 82, 82, 1.0);
+                }
+            """)
+        else:
+            self._favorite_btn.setText("\u2661")  # ♡
+            self._favorite_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(255, 255, 255, 0.8);
+                    color: #ff6b6b;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 14px;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: rgba(255, 255, 255, 1.0);
+                    border-color: #ff6b6b;
+                }
+            """)
+
+    @property
+    def is_favorite(self) -> bool:
+        """즐겨찾기 여부"""
+        return self._is_favorite
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """클릭 이벤트"""

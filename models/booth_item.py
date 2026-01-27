@@ -7,6 +7,9 @@ from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 from enum import Enum
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PriceType(Enum):
@@ -78,15 +81,15 @@ class BoothItem:
         if data.get("created_at"):
             try:
                 created_at = datetime.fromisoformat(data["created_at"])
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug(f"날짜 파싱 실패: {data.get('created_at')} - {e}")
 
         price_type = PriceType.UNKNOWN
         if data.get("price_type"):
             try:
                 price_type = PriceType(data["price_type"])
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.debug(f"가격 유형 파싱 실패: {data.get('price_type')} - {e}")
 
         return cls(
             id=data.get("id", ""),

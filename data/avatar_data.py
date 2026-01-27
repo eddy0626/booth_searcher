@@ -5,6 +5,7 @@
 """
 
 import json
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 from pathlib import Path
@@ -13,6 +14,10 @@ from utils.paths import get_data_dir
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# 캐시된 아바타 데이터 (thread-safe)
+_avatar_cache: Optional[List["AvatarData"]] = None
+_cache_lock = threading.Lock()
 
 
 @dataclass
@@ -70,17 +75,37 @@ def _get_user_data_path() -> Path:
     return get_data_dir() / "popular_avatars.json"
 
 
-def load_avatars() -> List[AvatarData]:
+def load_avatars(force_reload: bool = False) -> List[AvatarData]:
     """
-    인기 아바타 목록 로드
+    인기 아바타 목록 로드 (캐시 사용)
 
     우선순위:
     1. 사용자 데이터 디렉토리
     2. 번들된 데이터 파일
 
+    Args:
+        force_reload: True면 캐시를 무시하고 다시 로드
+
     Returns:
         아바타 목록
     """
+    global _avatar_cache
+
+    # 캐시 확인 (double-checked locking)
+    if not force_reload and _avatar_cache is not None:
+        return _avatar_cache
+
+    with _cache_lock:
+        if not force_reload and _avatar_cache is not None:
+            return _avatar_cache
+
+        avatars = _load_avatars_from_disk()
+        _avatar_cache = avatars
+        return avatars
+
+
+def _load_avatars_from_disk() -> List[AvatarData]:
+    """디스크에서 아바타 데이터 로드 (내부 함수)"""
     # 사용자 데이터 확인
     user_path = _get_user_data_path()
     if user_path.exists():
@@ -104,6 +129,14 @@ def load_avatars() -> List[AvatarData]:
     # 기본값
     logger.warning("아바타 데이터를 찾을 수 없음, 기본값 사용")
     return _get_default_avatars()
+
+
+def clear_avatar_cache() -> None:
+    """아바타 캐시 초기화"""
+    global _avatar_cache
+    with _cache_lock:
+        _avatar_cache = None
+        logger.debug("아바타 캐시 초기화됨")
 
 
 def _load_from_file(path: Path) -> List[AvatarData]:
